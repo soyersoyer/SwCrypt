@@ -63,6 +63,32 @@ When decrypting using a private key:
 - Decrypt message
 - Convert NSData to UTF8 strint
 
+Install
+-------
+Just copy `SwCrypt.swift` to your project.
+SwCrypt uses `CommonCrypto`, so please create a new build phase for the following script, and put it before the compilation.
+
+```bash
+modulesDirectory=$DERIVED_FILES_DIR/modules
+modulesMap=$modulesDirectory/module.modulemap
+modulesMapTemp=$modulesDirectory/module.modulemap.tmp
+
+mkdir -p "$modulesDirectory"
+
+cat > "$modulesMapTemp" << MAP
+module CommonCrypto [system] {
+    header "$SDKROOT/usr/include/CommonCrypto/CommonCrypto.h"
+    export *
+}
+MAP
+
+diff "$modulesMapTemp" "$modulesMap" >/dev/null 2>/dev/null
+if [[ $? != 0 ]] ; then
+    mv "$modulesMapTemp" "$modulesMap"
+else
+    rm "$modulesMapTemp"
+fi
+```
 
 Inspired from
 -------------
