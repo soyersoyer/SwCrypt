@@ -1,7 +1,7 @@
 import XCTest
 import SwCrypt
 
-let keyPair = try? SwKeyStore.generateRSAKeyPair(2048)
+let keyPair = try? CCRSA.generateKeyPair(2048)
 
 class SwCryptTest: XCTestCase {
 	

@@ -1,8 +1,11 @@
 import Foundation
 import CommonCrypto
+import CommonRSACryptor
 
 func error(desc: String, from: String = #function) -> SwError {
-	return SwError.Error(desc: "SwCrypt.\(from): " + desc)
+	let msg = "SwCrypt.\(from): " + desc
+	print(msg)
+	return SwError.Error(desc: msg)
 }
 
 extension SwError : CustomStringConvertible {
@@ -20,15 +23,6 @@ enum SwError : ErrorType {
 	
 public class SwKeyStore {
 
-	static public func generateRSAKeyPair(keySize: Int = 4096) throws -> (String, String) {
-		let (priv, pub) = try generateRSASecKeyPair(keySize)
-		let privKeyData = try getKeyDataFromSecKey(priv)
-		let pubKeyData = try getKeyDataFromSecKey(pub)
-		let privPEM = SwPrivateKey.getPEMFromKeyData(privKeyData)
-		let pubPEM = SwPublicKey.getPEMFromKeyData(pubKeyData)
-		return (privPEM, pubPEM)
-	}
-	
 	static public func upsertKey(pemKey: String, keyTag: String) throws {
 		let pemKeyAsData = pemKey.dataUsingEncoding(NSUTF8StringEncoding)!
 		
@@ -76,84 +70,6 @@ public class SwKeyStore {
 		guard status == errSecSuccess else {
 			throw error("SwKeyStore: SecItemDelete failed: \(status)")
 		}
-	}
-	
-	static private func generateRSASecKeyPair(keySize: Int) throws -> (SecKey,SecKey)  {
-		let parameters: [NSString: AnyObject] = [
-			kSecAttrKeyType: kSecAttrKeyTypeRSA,
-			kSecAttrKeySizeInBits: keySize,
-			]
-		
-		var publicKey: SecKey?
-		var privateKey: SecKey?
-		let status = SecKeyGeneratePair(parameters, &publicKey, &privateKey)
-		
-		guard status == errSecSuccess else {
-			throw error("SwKeyStore: SecKeyGeneratePair failed \(status)")
-		}
-		return (privateKey!,publicKey!)
-	}
-	
-	static private func delSecKey(key: SecKey) throws {
-		let parameters :[NSString : AnyObject] = [
-			kSecClass : kSecClassKey,
-			kSecAttrKeyType : kSecAttrKeyTypeRSA,
-			kSecValueRef: key,
-			]
-		let status = SecItemDelete(parameters)
-		guard status == errSecSuccess else {
-			throw error("SwKeyStore: SecItemDelete failed: \(status)")
-		}
-	}
-	
-	static private func getKeyDataFromSecKey(key: SecKey) throws -> NSData {
-		let parameters :[NSString : AnyObject] = [
-			kSecClass : kSecClassKey,
-			kSecAttrKeyType : kSecAttrKeyTypeRSA,
-			kSecValueRef: key,
-			kSecReturnData: true
-		]
-		var data : AnyObject?
-		let status = SecItemAdd(parameters, &data)
-		guard status == errSecSuccess else {
-			throw error("SwKeyStore: SecItemAdd failed \(status)")
-		}
-		try delSecKey(key)
-		
-		return data as! NSData
-	}
-	
-	static private func getSecKeyFromKeyData(keyData: NSData, isPublic: Bool) throws -> SecKey {
-		let parameters :[NSString : AnyObject] = [
-			kSecClass : kSecClassKey,
-			kSecAttrKeyType : kSecAttrKeyTypeRSA,
-			kSecAttrKeyClass: isPublic ? kSecAttrKeyClassPublic : kSecAttrKeyClassPrivate,
-			kSecValueData: keyData,
-			kSecReturnRef: true
-		]
-		var key : AnyObject?
-		let add_status = SecItemAdd(parameters, &key)
-		guard add_status == errSecSuccess else {
-			throw error("SwKeyStore: parse failed, SecItemAdd failed: \(add_status)")
-		}
-		let del_status = SecItemDelete(parameters)
-		guard del_status == errSecSuccess else {
-			throw error("SwKeyStore: SecItemDelete failed: \(del_status)")
-		}
-		guard let secKey = key as! SecKey? else {
-			throw error("SwKeyStore: invalid format (nil key returned)")
-		}
-		return secKey
-	}
-	
-	static private func getPublicSecKeyFromPEM(pemKey: String) throws -> SecKey {
-		let keyData = try SwPublicKey.getKeyDataFromPEM(pemKey)
-		return try getSecKeyFromKeyData(keyData, isPublic: true)
-	}
-	
-	static private func getPrivateSecKeyFromPEM(pemKey: String) throws -> SecKey {
-		let keyData = try SwPrivateKey.getKeyDataFromPEM(pemKey)
-		return try getSecKeyFromKeyData(keyData, isPublic: false)
 	}
 }
 
@@ -281,8 +197,8 @@ public class SwEncryptedPrivateKey {
 	static private let AES128CBCInfo = "Proc-Type: 4,ENCRYPTED\nDEK-Info: AES-128-CBC,"
 	static private let AES256CBCInfo = "Proc-Type: 4,ENCRYPTED\nDEK-Info: AES-256-CBC,"
 	static private let AESInfoLength = AES128CBCInfo.characters.count
-	static private let AESIVInHexSize = 32
-	static private let AESHeaderLength = AESInfoLength + AESIVInHexSize
+	static private let AESIVInHexLength = 32
+	static private let AESHeaderLength = AESInfoLength + AESIVInHexLength
 	
 	static private func getIV(strippedKey: String) -> NSData? {
 		let iv = strippedKey.substringWithRange(strippedKey.startIndex+AESInfoLength..<strippedKey.startIndex+AESHeaderLength)
@@ -315,9 +231,7 @@ public class SwEncryptedPrivateKey {
 		guard let data = NSData(base64EncodedString: base64Data, options: [.IgnoreUnknownCharacters]) else {
 			throw error("EncryptedPrivateKey: can't base64 decode PEM data")
 		}
-		guard let decrypted = data.decryptAES(aesKey, iv: iv, blockMode: .CBC) else {
-			throw error("EncryptedPrivateKey: can't decrypt data")
-		}
+		let decrypted = try CC.AESDecrypt(data, key: aesKey, iv: iv, blockMode: .CBC)
 		return decrypted
 	}
 	
@@ -328,7 +242,7 @@ public class SwEncryptedPrivateKey {
 		
 		let key = NSMutableData(data: pass)
 		key.appendData(salt)
-		return key.md5()
+		return CC.md5(key)
 	}
 	
 	static private func getAES256Key(passphrase: String, iv:NSData) -> NSData {
@@ -339,30 +253,30 @@ public class SwEncryptedPrivateKey {
 		
 		let first = NSMutableData(data: pass)
 		first.appendData(salt)
-		let aes128Key = first.md5()
+		let aes128Key = CC.md5(first)
 		
 		let sec = NSMutableData(data: aes128Key)
 		sec.appendData(pass)
 		sec.appendData(salt)
 		
 		let aes256Key = NSMutableData(data: aes128Key)
-		aes256Key.appendData(sec.md5())
+		aes256Key.appendData(CC.md5(sec))
 		return aes256Key
 	}
 	
 	static private func encryptPrivateKeyAES128CBC(keyData: NSData, passphrase: String) -> String {
-		let iv = SwCC.generateRandom(16)
+		let iv = CC.generateRandom(16)
 		let aesKey = getAES128Key(passphrase, iv: iv)
-		let encrypted = keyData.encryptAES(aesKey, iv:iv, blockMode: .CBC)!
+		let encrypted = try! CC.AESEncrypt(keyData, key: aesKey, iv: iv, blockMode: .CBC)
 		return AES128CBCInfo + iv.hexadecimalString() + "\n\n" +
 			encrypted.base64EncodedStringWithOptions(
 				[.Encoding64CharacterLineLength,.EncodingEndLineWithLineFeed])
 	}
 	
 	static private func encryptPrivateKeyAES256CBC(keyData: NSData, passphrase: String) -> String {
-		let iv = SwCC.generateRandom(16)
+		let iv = CC.generateRandom(16)
 		let aesKey = getAES256Key(passphrase, iv: iv)
-		let encrypted = keyData.encryptAES(aesKey, iv:iv, blockMode: .CBC)!
+		let encrypted = try! CC.AESEncrypt(keyData, key: aesKey, iv: iv, blockMode: .CBC)
 		return AES256CBCInfo + iv.hexadecimalString() + "\n\n" +
 			encrypted.base64EncodedStringWithOptions(
 				[.Encoding64CharacterLineLength,.EncodingEndLineWithLineFeed])
@@ -538,11 +452,10 @@ public class SEM {
 			case .GCM: return 12
 			}
 		}
-		var cc: CCMode {
-			let kCCModeGCM : Int = 11
+		var cc: CC.BlockMode {
 			switch self {
-			case .CBC: return CCMode(kCCModeCBC)
-			case .GCM: return CCMode(kCCModeGCM)
+			case .CBC: return .CBC
+			case .GCM: return .GCM
 			}
 		}
 	}
@@ -550,20 +463,20 @@ public class SEM {
 	public enum HMACMode : UInt8 {
 		case None, SHA256, SHA512
 		
-		var cc: CCHmacAlgorithm {
+		var cc: CC.HMACAlg?  {
 			switch self {
-			case .None: return CCHmacAlgorithm(0)
-			case .SHA256: return CCHmacAlgorithm(kCCHmacAlgSHA256)
-			case .SHA512: return CCHmacAlgorithm(kCCHmacAlgSHA512)
+			case .None: return nil
+			case .SHA256: return .SHA256
+			case .SHA512: return .SHA512
 			}
 		}
-		var digestSize: Int {
+		var digestLength: Int {
 			switch self {
 			case .None: return 0
-			case .SHA256: return Int(CC_SHA256_DIGEST_LENGTH)
-			case .SHA512: return Int(CC_SHA512_DIGEST_LENGTH)
+			default: return self.cc!.digestLength
 			}
 		}
+
 	}
 	
 	public struct Mode {
@@ -602,62 +515,39 @@ public class SEM {
 	}
 	
 	static public func encryptData(data: NSData, pemKey: String, mode: Mode) throws -> NSData {
-		let key = try SwKeyStore.getPublicSecKeyFromPEM(pemKey)
-		return try encrypt(data, publicKey: key, mode: mode)
-	}
-	
-	static public func decryptData(data: NSData, pemKey: String) throws -> NSData {
-		let key = try SwKeyStore.getPrivateSecKeyFromPEM(pemKey)
-		return try decrypt(data, privateKey: key)
-	}
-	
-	static private func encrypt(data: NSData, publicKey: SecKey, mode: Mode) throws -> NSData {
-		var bufferSize = SecKeyGetBlockSize(publicKey)
-		var buffer = [UInt8](count: bufferSize, repeatedValue: 0)
+		let aesKey = CC.generateRandom(mode.aes.keySize)
+		let IV = CC.generateRandom(mode.block.ivSize)
+		let header = getMessageHeader(mode, aesKey: aesKey, IV: IV)
+		let encryptedHeader = try CCRSA.encrypt(header, pemKey: pemKey, padding: .OAEP, digest: .SHA1)
+		let encryptedData = try CC.AESEncrypt(data, key: aesKey, iv: IV, blockMode: mode.block.cc)
 		
-		let aesKey = SwCC.generateRandom(mode.aes.keySize)
-		let IV = SwCC.generateRandom(mode.block.ivSize)
-		let message = getMessageHeader(mode, aesKey: aesKey, IV: IV)
-		
-		let status = SecKeyEncrypt(publicKey, .OAEP, UnsafePointer<UInt8>(message.bytes), message.length, &buffer, &bufferSize)
-		guard status == noErr else {
-			throw error("SEM: SecKeyEncrypt failed \(status)")
+		let result = NSMutableData()
+		result.appendData(encryptedHeader)
+		result.appendData(encryptedData)
+		if mode.hmac != .None {
+			result.appendData(CC.HMAC(result, alg: mode.hmac.cc!, key: aesKey))
 		}
-		
-		guard let encrypted = data.encryptAES(aesKey, iv: IV, blockMode: mode.block) else {
-			throw error("SEM: encryptAES failed")
-		}
-		
-		let result = NSMutableData(bytes: buffer, length: bufferSize)
-		result.appendData(encrypted)
-		let hmac = result.hmac(mode.hmac, key: aesKey)
-		result.appendData(hmac)
 		return result
 	}
 	
-	static private func decrypt(data: NSData, privateKey: SecKey) throws -> NSData {
-		let blockSize = SecKeyGetBlockSize(privateKey)
-		var bufferSize = blockSize
-		var buffer = [UInt8](count: bufferSize, repeatedValue: 0)
+	
+	static public func decryptData(data: NSData, pemKey: String) throws -> NSData {
+		let (header, tail) = try CCRSA.decrypt(data, pemKey: pemKey, padding: .OAEP, digest: .SHA1)
+		let (mode, aesKey, iv) = try parseMessageHeader(header)
 		
-		let status = SecKeyDecrypt(privateKey, .OAEP, UnsafePointer<UInt8>(data.bytes), bufferSize, &buffer, &bufferSize)
-		
-		guard status == noErr else {
-			throw error("SEM: SecKeyDecrypt failed \(status)")
+		try checkHMAC(data, aesKey: aesKey, mode: mode.hmac)
+		let aesData = tail.subdataWithRange(NSRange(location: 0, length: tail.length - mode.hmac.digestLength))
+		return try CC.AESDecrypt(aesData, key: aesKey, iv: iv, blockMode: mode.block.cc)
+	}
+	
+	static private func checkHMAC(data: NSData, aesKey: NSData, mode: SEM.HMACMode) throws {
+		if mode != .None {
+			let hmaccedData = data.subdataWithRange(NSRange(location: 0, length: data.length - mode.digestLength))
+			let hmac = data.subdataWithRange(NSRange(location: data.length - mode.digestLength, length: mode.digestLength))
+			guard CC.HMAC(hmaccedData, alg: mode.cc!, key: aesKey) == hmac else {
+				throw error("SEM: invalid message (HMAC)")
+			}
 		}
-		guard let (mode, aesKey, iv) = parseMessageHeader(Array(buffer.prefix(bufferSize))) else {
-			throw error("SEM: can't parse message header")
-		}
-		let hmacData = data.subdataWithRange(NSRange(location: 0, length: data.length - mode.hmac.digestSize))
-		let aesData = data.subdataWithRange(NSRange(location: blockSize, length: data.length - blockSize - mode.hmac.digestSize))
-		let hmac = data.subdataWithRange(NSRange(location: data.length - mode.hmac.digestSize, length:  mode.hmac.digestSize))
-		guard hmacData.hmac(mode.hmac, key: aesKey) == hmac else {
-			throw error("SEM: invalid message (hmac)")
-		}
-		guard let decrypted = aesData.decryptAES(aesKey, iv: iv, blockMode: mode.block) else {
-			throw error("SEM: decryptAES failed")
-		}
-		return decrypted
 	}
 	
 	static private func getMessageHeader(mode: Mode, aesKey: NSData, IV: NSData) -> NSData {
@@ -668,29 +558,220 @@ public class SEM {
 		return message
 	}
 	
-	static private func parseMessageHeader(bytes: [UInt8]) -> (Mode, NSData, NSData)? {
-		guard bytes.count > 3 else {
-			return nil
+	static private func parseMessageHeader(header: NSData) throws -> (Mode, NSData, NSData) {
+		guard header.length > 3 else {
+			throw error("SEM: invalid header length: \(header.length)")
 		}
-		guard let aes = AesMode(rawValue:bytes[0]),
-			block = BlockMode(rawValue: bytes[1]),
-			hmac = HMACMode(rawValue: bytes[2]) else {
-				return nil
+		let bytes = header.arrayOfBytes()
+		guard let aes = AesMode(rawValue: bytes[0]) else {
+			throw error("SEM: invalid aes mode: \(bytes[0])")
+		}
+		guard let block = BlockMode(rawValue: bytes[1]) else {
+			throw error("SEM: invalid block mode: \(bytes[1])")
+		}
+		guard let hmac = HMACMode(rawValue: bytes[2]) else {
+			throw error("SEM: invalid hmac mode: \(bytes[2])")
 		}
 		let keySize = aes.keySize
 		let ivSize = block.ivSize
-		guard bytes.count == 3 + keySize + ivSize else {
-			return nil
+		guard header.length == 3 + keySize + ivSize else {
+			throw error("SEM: invalid header length: \(header.length)")
 		}
-		let key = NSData(bytes: Array(bytes[3..<3+keySize]), length: keySize)
-		let iv = NSData(bytes: Array(bytes[3+keySize..<3+keySize+ivSize]), length: ivSize)
-			
+		let key = header.subdataWithRange(NSRange(location: 3, length: keySize))
+		let iv = header.subdataWithRange(NSRange(location: 3 + keySize, length: ivSize))
+		
 		return (Mode(aes: aes, block: block, hmac: hmac), key, iv)
 	}	
 }
 
-public class SwCC {
-	public enum OpMode {
+public class CCRSA {
+	public enum AsymmetricPadding {
+		case PKCS1, OAEP
+		
+		var cc : CCAsymmetricPadding {
+			switch self {
+			case .PKCS1: return CCAsymmetricPadding(ccPKCS1Padding)
+			case .OAEP: return CCAsymmetricPadding(ccOAEPPadding)
+			}
+		}
+	}
+	
+	public enum DigestAlgorithm {
+		case None, SHA1, SHA224, SHA256, SHA384, SHA512
+		
+		var cc: CCDigestAlgorithm {
+			switch self {
+			case .None: return CCDigestAlgorithm(kCCDigestNone)
+			case .SHA1: return CCDigestAlgorithm(kCCDigestSHA1)
+			case .SHA224: return CCDigestAlgorithm(kCCDigestSHA224)
+			case .SHA256: return CCDigestAlgorithm(kCCDigestSHA256)
+			case .SHA384: return CCDigestAlgorithm(kCCDigestSHA384)
+			case .SHA512: return CCDigestAlgorithm(kCCDigestSHA512)
+			}
+		}
+	}
+	
+	static public func generateKeyPair(keySize: Int = 4096) throws -> (String, String) {
+		var privateKey: CCRSACryptorRef = nil
+		var publicKey: CCRSACryptorRef = nil
+		var status = CCRSACryptorGeneratePair(keySize, 65537, &publicKey, &privateKey)
+		guard status == noErr else {
+			throw error("CCRSACryptorGeneratePair failed \(status)")
+		}
+		defer {	CCRSACryptorRelease(privateKey) }
+		defer { CCRSACryptorRelease(publicKey) }
+		
+		var privKeyDataLength = 8192
+		let privKeyData = NSMutableData(length: privKeyDataLength)!
+		var pubKeyDataLength = 8192
+		let pubKeyData = NSMutableData(length: pubKeyDataLength)!
+		
+		status = CCRSACryptorExport(privateKey, privKeyData.mutableBytes, &privKeyDataLength)
+		guard status == noErr else {
+			throw error("CCRSACryptorExport privateKey failed \(status)")
+		}
+		status = CCRSACryptorExport(publicKey, pubKeyData.mutableBytes, &pubKeyDataLength)
+		guard status == noErr else {
+			throw error("CCRSACryptorExport publicKey failed \(status)")
+		}
+		
+		privKeyData.length = privKeyDataLength
+		pubKeyData.length = pubKeyDataLength
+		
+		let privPEM = SwPrivateKey.getPEMFromKeyData(privKeyData)
+		let pubPEM = SwPublicKey.getPEMFromKeyData(pubKeyData)
+		return (privPEM, pubPEM)
+	}
+	
+	static public func encrypt(data: NSData, pemKey: String, padding: AsymmetricPadding, digest: DigestAlgorithm) throws -> NSData {
+		let keyData = try SwPublicKey.getKeyDataFromPEM(pemKey)
+		let key = try getRSAKeyFromKeyData(keyData)
+		defer { CCRSACryptorRelease(key) }
+		
+		var bufferSize = Int(CCRSAGetKeySize(key)/8)
+		let buffer = NSMutableData(length: bufferSize)!
+		
+		let status = CCRSACryptorEncrypt(key, padding.cc, data.bytes, data.length, buffer.mutableBytes, &bufferSize, nil, 0, digest.cc)
+		guard status == noErr else {
+			throw error("CCRSACryptorEncrypt failed \(status)")
+		}
+		return buffer
+	}
+	
+	static public func decrypt(data: NSData, pemKey: String, padding: AsymmetricPadding, digest: DigestAlgorithm) throws -> (NSData, NSData) {
+		let keyData = try SwPrivateKey.getKeyDataFromPEM(pemKey)
+		let key = try getRSAKeyFromKeyData(keyData)
+		defer { CCRSACryptorRelease(key) }
+		
+		let blockSize = Int(CCRSAGetKeySize(key) / 8)
+		var bufferSize = blockSize
+		let buffer = NSMutableData(length: bufferSize)!
+		
+		let status = CCRSACryptorDecrypt(key, padding.cc, data.bytes, bufferSize, buffer.mutableBytes, &bufferSize, nil, 0, digest.cc)
+		guard status == noErr else {
+			throw error("CCRSACryptorDecrypt failed \(status)")
+		}
+		buffer.length = bufferSize
+		let tail = data.subdataWithRange(NSRange(location: blockSize, length: data.length - blockSize))
+		return (buffer, tail)
+	}
+
+	static private func getRSAKeyFromKeyData(keyData: NSData) throws -> CCRSACryptorRef {
+		var key : CCRSACryptorRef = nil
+		let status = CCRSACryptorImport(keyData.bytes, keyData.length, &key)
+		guard status == noErr else {
+			throw error("CCRSACryptorImport failed \(status)")
+		}
+		return key
+	}
+}
+
+public class CC {
+	
+	static public func AESEncrypt(data: NSData, key: NSData, iv: NSData, blockMode: BlockMode) throws -> NSData {
+		return try AESCrypt(.encrypt, data: data, key: key, iv: iv, blockMode: blockMode)
+	}
+	
+	static public func AESDecrypt(data: NSData, key: NSData, iv: NSData, blockMode: BlockMode) throws -> NSData {
+		return try AESCrypt(.decrypt, data: data, key: key, iv: iv, blockMode: blockMode)
+	}
+	
+	
+	static public func generateRandom(size: Int) -> NSData {
+		let data = NSMutableData(length: size)!
+		CCRandomCopyBytes(kCCRandomDefault, data.mutableBytes, size)
+		return data
+	}
+	
+	static public func sha1(data: NSData) -> NSData {
+		let result = NSMutableData(length: Int(CC_SHA1_DIGEST_LENGTH))!
+		CC_SHA1(data.bytes, CC_LONG(data.length), UnsafeMutablePointer<UInt8>(result.mutableBytes))
+		return result
+	}
+	
+	static public func sha256(data: NSData) -> NSData {
+		let result = NSMutableData(length: Int(CC_SHA256_DIGEST_LENGTH))!
+		CC_SHA256(data.bytes, CC_LONG(data.length), UnsafeMutablePointer<UInt8>(result.mutableBytes))
+		return result
+	}
+	
+	static public func sha384(data: NSData) -> NSData {
+		let result = NSMutableData(length: Int(CC_SHA384_DIGEST_LENGTH))!
+		CC_SHA384(data.bytes, CC_LONG(data.length), UnsafeMutablePointer<UInt8>(result.mutableBytes))
+		return result
+	}
+	
+	static public func sha512(data: NSData) -> NSData {
+		let result = NSMutableData(length: Int(CC_SHA512_DIGEST_LENGTH))!
+		CC_SHA512(data.bytes, CC_LONG(data.length), UnsafeMutablePointer<UInt8>(result.mutableBytes))
+		return result
+	}
+	
+	static public func sha224(data: NSData) -> NSData {
+		let result = NSMutableData(length: Int(CC_SHA224_DIGEST_LENGTH))!
+		CC_SHA224(data.bytes, CC_LONG(data.length), UnsafeMutablePointer<UInt8>(result.mutableBytes))
+		return result
+	}
+	
+	static public func md5(data: NSData) -> NSData {
+		let result = NSMutableData(length: Int(CC_MD5_DIGEST_LENGTH))!
+		CC_MD5(data.bytes, CC_LONG(data.length), UnsafeMutablePointer<UInt8>(result.mutableBytes))
+		return result
+	}
+	
+	public enum HMACAlg {
+		case SHA1, MD5, SHA256, SHA384, SHA512, SHA224
+		
+		var cc: CCHmacAlgorithm {
+			switch self {
+			case .SHA1: return CCHmacAlgorithm(kCCHmacAlgSHA1)
+			case .MD5: return CCHmacAlgorithm(kCCHmacAlgMD5)
+			case .SHA256: return CCHmacAlgorithm(kCCHmacAlgSHA256)
+			case .SHA384: return CCHmacAlgorithm(kCCHmacAlgSHA384)
+			case .SHA512: return CCHmacAlgorithm(kCCHmacAlgSHA512)
+			case .SHA224: return CCHmacAlgorithm(kCCHmacAlgSHA224)
+			}
+		}
+		var digestLength: Int {
+			switch self {
+			case .SHA1: return Int(CC_SHA1_DIGEST_LENGTH)
+			case .MD5: return Int(CC_MD5_DIGEST_LENGTH)
+			case .SHA256: return Int(CC_SHA256_DIGEST_LENGTH)
+			case .SHA384: return Int(CC_SHA384_DIGEST_LENGTH)
+			case .SHA512: return Int(CC_SHA512_DIGEST_LENGTH)
+			case .SHA224: return Int(CC_SHA224_DIGEST_LENGTH)
+			}
+		}
+	}
+
+	
+	static public func HMAC(data: NSData, alg: HMACAlg, key: NSData) -> NSData {
+		let buffer = NSMutableData(length: alg.digestLength)!
+		CCHmac(alg.cc, key.bytes, key.length, data.bytes, data.length, buffer.mutableBytes)
+		return buffer
+	}
+	
+	private enum OpMode {
 		case encrypt, decrypt
 		
 		var cc: CCOperation {
@@ -701,43 +782,53 @@ public class SwCC {
 		}
 	}
 	
-	static public func crypt(opMode: OpMode, key: NSData, iv: NSData, blockMode: SEM.BlockMode, data: NSData) -> NSData? {
+	public enum BlockMode {
+		case ECB, CBC, CFB, CTR, OFB, XTS, RC4, CFB8, GCM
+		
+		var cc: CCMode {
+			switch self {
+			case .ECB: return CCMode(kCCModeECB)
+			case .CBC: return CCMode(kCCModeCBC)
+			case .CFB: return CCMode(kCCModeCFB)
+			case .CTR: return CCMode(kCCModeCTR)
+			case .OFB: return CCMode(kCCModeOFB)
+			case .XTS: return CCMode(kCCModeXTS)
+			case .RC4: return CCMode(kCCModeRC4)
+			case .CFB8: return CCMode(kCCModeCFB8)
+			case .GCM: return CCMode(11/*kCCModeGCM*/)
+			}
+		}
+	}
+	
+	static private func AESCrypt(opMode: OpMode, data: NSData, key: NSData, iv: NSData, blockMode: BlockMode) throws -> NSData {
 		var cryptor : CCCryptorRef = nil
-		guard kCCSuccess == Int(CCCryptorCreateWithMode(
+		var status = CCCryptorCreateWithMode(
 			opMode.cc, blockMode.cc,
 			CCAlgorithm(kCCAlgorithmAES), CCPadding(ccPKCS7Padding),
-			iv.bytes, key.bytes, key.length, nil, 0, 0,	CCModeOptions(), &cryptor)) else {
-				return nil
+			iv.bytes, key.bytes, key.length, nil, 0, 0,	CCModeOptions(), &cryptor)
+		guard status == noErr else {
+			throw error("CCCryptorCreateWithMode failed: \(status)")
 		}
-		defer {
-			CCCryptorRelease(cryptor)
-		}
+		defer { CCCryptorRelease(cryptor) }
 		
 		let needed = CCCryptorGetOutputLength(cryptor, data.length, true)
-		guard let result = NSMutableData(length: needed) else {
-			return nil
-		}
-		
+		let result = NSMutableData(length: needed)!
 		var updateLen: size_t = 0
-		guard kCCSuccess == Int(CCCryptorUpdate(cryptor, data.bytes, data.length,
-			result.mutableBytes, result.length, &updateLen)) else {
-				return nil
+		status = CCCryptorUpdate(cryptor, data.bytes, data.length,
+		                         result.mutableBytes, result.length, &updateLen)
+		guard status == noErr else {
+			throw error("CCCryptorUpdate failed: \(status)")
 		}
 		
 		var finalLen: size_t = 0
-		guard kCCSuccess == Int(CCCryptorFinal(cryptor, result.mutableBytes + updateLen,
-			result.length - updateLen, &finalLen)) else {
-				return nil
+		status = CCCryptorFinal(cryptor, result.mutableBytes + updateLen,
+		                        result.length - updateLen, &finalLen)
+		guard status == noErr else {
+			throw error("CCCryptorFinal failed: \(status)")
 		}
 		
 		result.length = updateLen + finalLen
 		return result
-	}
-	
-	static public func generateRandom(size: Int) -> NSData {
-		var result = [UInt8](count: size, repeatedValue: 0)
-		SecRandomCopyBytes(kSecRandomDefault, size, &result)
-		return NSData(bytes: result, length: size)
 	}
 }
 
@@ -752,30 +843,6 @@ extension NSData {
 			hexstr += String(format: "%02X", i)
 		}
 		return hexstr
-	}
-	
-	func md5() -> NSData {
-		let result = NSMutableData(length: Int(CC_MD5_DIGEST_LENGTH))!
-		CC_MD5(bytes, CC_LONG(length), UnsafeMutablePointer<UInt8>(result.mutableBytes))
-		return NSData(data: result)
-	}
-	
-	func hmac(algorithm: SEM.HMACMode, key: NSData) -> NSData {
-		if algorithm == .None {
-			return NSData()
-		}
-		
-		var buffer = [UInt8](count: algorithm.digestSize, repeatedValue: 0)
-		CCHmac(algorithm.cc, key.bytes, key.length, self.bytes, self.length, &buffer)
-		return NSData(bytes: buffer, length: algorithm.digestSize)
-	}
-
-	func encryptAES(key: NSData, iv: NSData, blockMode: SEM.BlockMode) -> NSData? {
-		return SwCC.crypt(.encrypt, key: key, iv: iv, blockMode: blockMode, data: self)
-	}
-	
-	func decryptAES(key: NSData, iv: NSData, blockMode: SEM.BlockMode) -> NSData? {
-		return SwCC.crypt(.decrypt, key: key, iv: iv, blockMode: blockMode, data: self)
 	}
 	
 	public func arrayOfBytes() -> [UInt8] {
