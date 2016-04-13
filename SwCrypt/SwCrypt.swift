@@ -23,23 +23,25 @@ enum SwError : ErrorType {
 	
 public class SwKeyStore {
 
-	static public func upsertKey(pemKey: String, keyTag: String) throws {
+	static public func upsertKey(pemKey: String, keyTag: String, options: [NSString : AnyObject] = [:]) throws {
 		let pemKeyAsData = pemKey.dataUsingEncoding(NSUTF8StringEncoding)!
 		
-		let parameters :[NSString : AnyObject] = [
+		var parameters :[NSString : AnyObject] = [
 			kSecClass : kSecClassKey,
 			kSecAttrKeyType : kSecAttrKeyTypeRSA,
 			kSecAttrIsPermanent: true,
 			kSecAttrApplicationTag: keyTag,
 			kSecValueData: pemKeyAsData
 		]
+		options.forEach({k, v in parameters[k] = v})
+		
 		var status = SecItemAdd(parameters, nil)
 		if status == errSecDuplicateItem {
 			try delKey(keyTag)
 			status = SecItemAdd(parameters, nil)
 		}
 		guard status == errSecSuccess else {
-			throw error("SwKeyStore: keyTag: \(keyTag)) failed: \(status)")
+			throw error("SwKeyStore: keyTag: \(keyTag) failed: \(status)")
 		}
 	}
 	

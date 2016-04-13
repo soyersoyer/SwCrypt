@@ -20,7 +20,7 @@ class SwCryptTest: XCTestCase {
 	
 	func testUpsert() {
 		let (priv, _) = keyPair!
-		XCTAssertNotNil(try? SwKeyStore.upsertKey(priv, keyTag: "priv"))
+		XCTAssertNotNil(try? SwKeyStore.upsertKey(priv, keyTag: "priv", options: [kSecAttrAccessible:kSecAttrAccessibleWhenUnlockedThisDeviceOnly]))
 		XCTAssertNotNil(try? SwKeyStore.upsertKey(priv, keyTag: "priv"))
 		XCTAssert(try SwKeyStore.getKey("priv") == priv)
 	}
