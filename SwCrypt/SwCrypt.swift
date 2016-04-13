@@ -202,36 +202,33 @@ public class SwEncryptedPrivateKey {
 	static private let AESIVInHexLength = 32
 	static private let AESHeaderLength = AESInfoLength + AESIVInHexLength
 	
-	static private func getIV(strippedKey: String) -> NSData? {
-		let iv = strippedKey.substringWithRange(strippedKey.startIndex+AESInfoLength..<strippedKey.startIndex+AESHeaderLength)
-		return iv.dataFromHexadecimalString()
+	static private func getIV(strippedKey: String) throws -> NSData {
+		let ivInHex = strippedKey.substringWithRange(strippedKey.startIndex+AESInfoLength..<strippedKey.startIndex+AESHeaderLength)
+		guard let iv = ivInHex.dataFromHexadecimalString() else {
+			throw error("SwEncryptedPrivateKey invalid IV")
+		}
+		return iv
 	}
 	
-	static private func getAESKeyAndIV(strippedKey: String, passphrase: String) -> (NSData, NSData)? {
+	static private func getAESKeyAndIV(strippedKey: String, passphrase: String) throws -> (NSData, NSData) {
 		if strippedKey.hasPrefix(AES128CBCInfo) {
-			guard let iv = getIV(strippedKey) else {
-				return nil
-			}
+			let iv = try getIV(strippedKey)
 			let aesKey = getAES128Key(passphrase, iv: iv)
 			return (aesKey, iv)
 		}
 		if strippedKey.hasPrefix(AES256CBCInfo) {
-			guard let iv = getIV(strippedKey) else {
-				return nil
-			}
+			let iv = try getIV(strippedKey)
 			let aesKey = getAES256Key(passphrase, iv: iv)
 			return (aesKey, iv)
 		}
-		return nil
+		throw error("SwEncryptedPrivateKey can't parse encrypted header")
 	}
 	
 	static private func decryptPEM(strippedKey: String, passphrase: String) throws -> NSData {
-		guard let (aesKey,iv) = getAESKeyAndIV(strippedKey, passphrase: passphrase) else {
-			throw error("EncryptedPrivateKey: can't parse encrypted header")
-		}
+		let (aesKey,iv) = try getAESKeyAndIV(strippedKey, passphrase: passphrase)
 		let base64Data = strippedKey.substringFromIndex(strippedKey.startIndex+AESHeaderLength)
 		guard let data = NSData(base64EncodedString: base64Data, options: [.IgnoreUnknownCharacters]) else {
-			throw error("EncryptedPrivateKey: can't base64 decode PEM data")
+			throw error("SwEncryptedPrivateKey can't base64 decode PEM data")
 		}
 		let decrypted = try CC.AESDecrypt(data, key: aesKey, iv: iv, blockMode: .CBC)
 		return decrypted
