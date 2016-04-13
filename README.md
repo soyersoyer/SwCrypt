@@ -3,28 +3,42 @@ SwCrypt
 
 ### Create public and private keys in PEM format
 ```
-let (privateKey, publicKey) = try! SwKeyStore.generateRSAKeyPair(2048)
+let (privateKey, publicKey) = try! CCRSA.generateKeyPair(2048)
+```
+### Encrypt/decrypt data with RSA/AES
+```
+try CCRSA.encrypt(data, pemKey: publicKey, padding: .OAEP, digest: .SHA1)
+try CCRSA.decrypt(data, pemKey: privateKey, padding: .OAEP, digest: .SHA1)
+try CC.AESEncrypt(data, key: aesKey, iv: iv, blockMode: .CBC)
+try CC.AESDecrypt(data, key: aesKey, iv: iv, blockMode: .CBC)
+```
+### HMAC and HASH functions
+```
+CC.md5(data)
+CC.sha256(data)
+CC.sha512(data)
+CC.HMAC(data, alg: .SHA512, key: key)
 ```
 ### Upsert, get, delete keys from KeyStore
 ```
-try SwKeyStore.upsertKey(privateKey, keyTag: "priv")
+try SwKeyStore.upsertKey(privateKey, keyTag: "priv", options: [kSecAttrAccessible:kSecAttrAccessibleWhenUnlockedThisDeviceOnly])
 try SwKeyStore.getKey("priv")
 try SwKeyStore.delKey("priv")
 ```
 ### Encrypt/decrypt private key (OpenSSL compatible)
 ```
-public enum Mode {case AES128CBC, AES256CBC}
+//public enum Mode {case AES128CBC, AES256CBC}
 
 try SwEncryptedPrivateKey.encryptPEM(priv, passphrase: "longpassword", mode: .AES256CBC)
 try SwEncryptedPrivateKey.decryptPEM(privEncrypted, passphrase: "longpassword")
 ```
 
-### Encrypt/Decrypt message in SEM (Simple Encrypted Message) format
+### Encrypt/decrypt message in SEM (Simple Encrypted Message) format
 (works with OpenSSL PEM formatted keys too)
 ```
-public enum AesMode : UInt8 {case AES128, AES192, AES256}
-public enum BlockMode : UInt8 {case CBC, GCM}
-public enum HMACMode : UInt8 {case None, SHA256, SHA512}
+//public enum AesMode : UInt8 {case AES128, AES192, AES256}
+//public enum BlockMode : UInt8 {case CBC, GCM}
+//public enum HMACMode : UInt8 {case None, SHA256, SHA512}
 
 let mode = SEM.Mode(aes:.AES256, block:.CBC, hmac:.SHA512)
 try SEM.encryptMessage(testMessage, pemKey: publicKey, mode: mode)
@@ -65,7 +79,7 @@ When decrypting using a private key:
 
 Install
 -------
-Just copy `SwCrypt.swift` to your project.
+Just copy `SwCrypt.swift` and `CommonRSACryptor.h` to your project.
 SwCrypt uses `CommonCrypto`, so please create a new build phase for the following script, and put it before the compilation.
 
 ```bash
@@ -78,6 +92,10 @@ mkdir -p "$modulesDirectory"
 cat > "$modulesMapTemp" << MAP
 module CommonCrypto [system] {
     header "$SDKROOT/usr/include/CommonCrypto/CommonCrypto.h"
+    export *
+}
+module CommonRSACryptor [system] {
+    header "$SRCROOT/CommonRSACryptor.h"
     export *
 }
 MAP
