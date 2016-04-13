@@ -7,12 +7,12 @@ let (privateKey, publicKey) = try! CCRSA.generateKeyPair(2048)
 let privateKeyPEM = try SWPrivateKey.derToPKCS1PEM(privateKey)
 let publicKeyPEM = SwPublicKey.derToPKCS8PEM(publicKey)
 ```
-### Encrypt/decrypt data with RSA/AES
+### Encrypt/decrypt data with RSA or symmetric ciphers
 ```
 try CCRSA.encrypt(data, derKey: publicKey, padding: .OAEP, digest: .SHA1)
 try CCRSA.decrypt(data, derKey: privateKey, padding: .OAEP, digest: .SHA1)
-try CC.crypt(.encrypt, blockMode: .CBC, algorithm: .RSA, padding: .PKCS7Padding, data: data, key: aesKey, iv: iv)
-try CC.crypt(.decrypt, blockMode: .CBC, algorithm: .RSA, padding: .PKCS7Padding, data: data, key: aesKey, iv: iv)
+try CC.crypt(.encrypt, blockMode: .CBC, algorithm: .AES, padding: .PKCS7Padding, data: data, key: aesKey, iv: iv)
+try CC.crypt(.decrypt, blockMode: .CBC, algorithm: .AES, padding: .PKCS7Padding, data: data, key: aesKey, iv: iv)
 ```
 ### HMAC and HASH functions
 ```
@@ -23,7 +23,7 @@ CC.HMAC(data, alg: .SHA512, key: key)
 ```
 ### Upsert, get, delete keys from KeyStore
 ```
-try SwKeyStore.upsertKey(privateKey, keyTag: "priv", options: [kSecAttrAccessible:kSecAttrAccessibleWhenUnlockedThisDeviceOnly])
+try SwKeyStore.upsertKey(privateKeyPEM, keyTag: "priv", options: [kSecAttrAccessible:kSecAttrAccessibleWhenUnlockedThisDeviceOnly])
 try SwKeyStore.getKey("priv")
 try SwKeyStore.delKey("priv")
 ```
