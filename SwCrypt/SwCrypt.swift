@@ -2,28 +2,41 @@ import Foundation
 import CommonCrypto
 import CommonRSACryptor
 
-func error(desc: String, from: String = #function) -> SwError {
-	let msg = "SwCrypt.\(from): " + desc
-	print(msg)
-	return SwError.Error(desc: msg)
+
+enum SwError : ErrorType {
+	case Base64Decoding
+	case UTF8Decoding
+	case ASN1Parse
+	case PEMParse
+	case SEMParse
+	case MessageAuthentication
 }
 
-extension SwError : CustomStringConvertible {
-	var description: String {
-		switch self {
-		case .Error(let desc):
-			return desc
+enum SecError : OSStatus, ErrorType {
+	case Unimplemented = -4
+	case Param = -50
+	case Allocate = -108
+	case NotAvailable = -25291
+	case AuthFailed = -25293
+	case DuplicateItem = -25299
+	case ItemNotFound = -25300
+	case InteractionNotAllowed = -25308
+	case Decode = -26275
+	case Unknown = -2147483648
+	init(status: OSStatus) {
+		self = SecError(rawValue: status) ?? .Unknown
+	}
+	static func check(status: OSStatus) throws {
+		guard status == errSecSuccess else {
+			throw SecError(status: status)
 		}
 	}
 }
 
-enum SwError : ErrorType {
-	case Error(desc: String)
-}
-	
 public class SwKeyStore {
-
-	static public func upsertKey(pemKey: String, keyTag: String, options: [NSString : AnyObject] = [:]) throws {
+	
+	static public func upsertKey(pemKey: String, keyTag: String,
+	                             options: [NSString : AnyObject] = [:]) throws {
 		let pemKeyAsData = pemKey.dataUsingEncoding(NSUTF8StringEncoding)!
 		
 		var parameters :[NSString : AnyObject] = [
@@ -40,9 +53,7 @@ public class SwKeyStore {
 			try delKey(keyTag)
 			status = SecItemAdd(parameters, nil)
 		}
-		guard status == errSecSuccess else {
-			throw error("SwKeyStore: keyTag: \(keyTag) failed: \(status)")
-		}
+		try SecError.check(status)
 	}
 	
 	static public func getKey(keyTag: String) throws -> String {
@@ -53,123 +64,54 @@ public class SwKeyStore {
 			kSecReturnData : true
 		]
 		var data: AnyObject?
-		let status = SecItemCopyMatching(parameters, &data)
-		guard status == errSecSuccess else {
-			throw error("SwKeyStore: keyTag: \(keyTag) SecItemCopyMatching failed: \(status)")
-		}
+		try SecError.check(SecItemCopyMatching(parameters, &data))
 		guard let pemKeyAsData = data as? NSData else {
-			throw error("SwKeyStore: keyTag: \(keyTag) decoding failed")
+			throw SwError.UTF8Decoding
 		}
-		return String(data: pemKeyAsData, encoding: NSUTF8StringEncoding)!
+		guard let result = String(data: pemKeyAsData, encoding: NSUTF8StringEncoding) else {
+			throw SwError.UTF8Decoding
+		}
+		return result
 	}
 	
 	static public func delKey(keyTag: String) throws {
-		let parameters :[NSString : AnyObject] = [
+		let parameters: [NSString : AnyObject] = [
 			kSecClass : kSecClassKey,
-			kSecAttrApplicationTag: keyTag,
-			]
-		let status = SecItemDelete(parameters)
-		guard status == errSecSuccess else {
-			throw error("SwKeyStore: SecItemDelete failed: \(status)")
-		}
+			kSecAttrApplicationTag: keyTag
+		]
+		try SecError.check(SecItemDelete(parameters))
 	}
 }
 
 public class SwPrivateKey {
 	
-	static public func getKeyDataFromPEM(pemKey: String) throws -> NSData {
-		let strippedKey = try stripPEMHeader(pemKey)
-		guard let data = NSData(base64EncodedString: strippedKey, options: [.IgnoreUnknownCharacters]) else {
-			throw error("SwPrivateKey: base64decode failed")
-		}
-		return try stripX509Header(data)
+	static public func pemToPKCS1DER(pemKey: String) throws -> NSData {
+		let derKey = try PEM.PrivateKey.toDER(pemKey)
+		return try PKCS8.PrivateKey.stripHeaderIfAny(derKey)
 	}
 	
-	static public func getPEMFromKeyData(keyData: NSData) -> String {
-		return addPEMRSAPreSuffix(keyData.base64EncodedStringWithOptions(
-			[.Encoding64CharacterLineLength,.EncodingEndLineWithLineFeed]))
-	}
-	
-	static private let PEMPrefix = "-----BEGIN PRIVATE KEY-----\n"
-	static private let PEMSuffix = "\n-----END PRIVATE KEY-----"
-	static private let PEMRSAPrefix = "-----BEGIN RSA PRIVATE KEY-----\n"
-	static private let PEMRSASuffix = "\n-----END RSA PRIVATE KEY-----"
-	
-	static private func addPEMPreSuffix(base64: String) -> String {
-		return PEMPrefix + base64 + PEMSuffix
-	}
-	
-	static private func addPEMRSAPreSuffix(base64: String) -> String {
-		return PEMRSAPrefix + base64 + PEMRSASuffix
-	}
-	
-	static private func stripPEMHeader(pemKey: String) throws -> String {
-		if pemKey.hasPrefix(PEMPrefix) {
-			guard let r = pemKey.rangeOfString(PEMSuffix) else {
-				throw error("SwPrivateKey: found prefix header but not suffix")
-			}
-			return pemKey.substringWithRange(PEMPrefix.endIndex..<r.startIndex)
-		}
-		if pemKey.hasPrefix(PEMRSAPrefix) {
-			guard let r = pemKey.rangeOfString(PEMRSASuffix) else {
-				throw error("SwPrivateKey: found prefix header but not suffix")
-			}
-			return pemKey.substringWithRange(PEMRSAPrefix.endIndex..<r.startIndex)
-		}
-		throw error("SwPrivateKey: prefix header hasn't found")
-	}
-	
-	//https://lapo.it/asn1js/
-	static private func stripX509Header(keyData: NSData) throws -> NSData {
-		var bytes = keyData.arrayOfBytes()
-		
-		var offset = 0
-		guard bytes[offset] == 0x30 else {
-			throw error("SwPrivateKey: ASN1 parse failed")
-		}
-		offset += 1
-			
-		if bytes[offset] > 0x80 {
-			offset += Int(bytes[offset]) - 0x80
-		}
-		offset += 1
-		
-		guard bytes[offset] == 0x02 else {
-			throw error("SwPrivateKey: ASN1 parse failed")
-		}
-		offset += 3
-		
-		//without header
-		if bytes[offset] == 0x02 {
-			return keyData
-		}
-		
-		let OID: [UInt8] = [0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
-							0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00]
-		let slice: [UInt8] = Array(bytes[offset..<(offset + OID.count)])
-		
-		guard slice == OID else {
-			throw error("SwPrivateKey: ASN1 parse failed")
-		}
-		
-		offset += OID.count
-		guard bytes[offset] == 0x04 else {
-			throw error("SwPrivateKey: ASN1 parse failed")
-		}
-		
-		offset += 1
-		if bytes[offset] > 0x80 {
-			offset += Int(bytes[offset]) - 0x80
-		}
-		offset += 1
-		
-		guard bytes[offset] == 0x30 else {
-			throw error("SwPrivateKey: ASN1 parse failed")
-		}
-		
-		return keyData.subdataWithRange(NSRange(location: offset, length: keyData.length - offset))
+	static public func derToPKCS1PEM(derKey: NSData) -> String {
+		return PEM.PrivateKey.toPEM(derKey)
 	}
 
+}
+
+public class SwPublicKey {
+	
+	static public func pemToPKCS1DER(pemKey: String) throws -> NSData {
+		let derKey = try PEM.PublicKey.toDER(pemKey)
+		return try PKCS8.PublicKey.stripHeaderIfAny(derKey)
+	}
+	
+	static public func derToPKCS1PEM(derKey: NSData) -> String {
+		return PEM.PublicKey.toPEM(derKey)
+	}
+	
+	static public func derToPKCS8PEM(derKey: NSData) -> String {
+		let pkcs8Key = PKCS8.PublicKey.addHeader(derKey)
+		return PEM.PublicKey.toPEM(pkcs8Key)
+	}
+	
 }
 
 public class SwEncryptedPrivateKey {
@@ -178,263 +120,378 @@ public class SwEncryptedPrivateKey {
 	}
 	
 	static public func encryptPEM(pemKey: String, passphrase: String, mode: Mode) throws -> String {
-		let keyData = try SwPrivateKey.getKeyDataFromPEM(pemKey)
-		return getPEMFromKeyData(keyData, passphrase: passphrase, mode: mode)
+		let derKey = try PEM.PrivateKey.toDER(pemKey)
+		return try PEM.EncryptedPrivateKey.toPEM(derKey, passphrase: passphrase, mode: mode)
 	}
 	
 	static public func decryptPEM(pemKey: String, passphrase: String) throws -> String {
-		let keyData = try getKeyDataFromPEM(pemKey, passphrase: passphrase)
-		return SwPrivateKey.getPEMFromKeyData(keyData)
-	}
-	
-	static public func getPEMFromKeyData(keyData: NSData, passphrase: String, mode: Mode) -> String {
-		return SwPrivateKey.addPEMRSAPreSuffix(encryptKeyData(keyData, passphrase: passphrase, mode: mode))
-	}
-	
-	static public func getKeyDataFromPEM(pemKey: String, passphrase: String) throws -> NSData {
-		let strippedKey = try SwPrivateKey.stripPEMHeader(pemKey)
-		return try decryptPEM(strippedKey, passphrase: passphrase)
-	}
-	
-	static private let AES128CBCInfo = "Proc-Type: 4,ENCRYPTED\nDEK-Info: AES-128-CBC,"
-	static private let AES256CBCInfo = "Proc-Type: 4,ENCRYPTED\nDEK-Info: AES-256-CBC,"
-	static private let AESInfoLength = AES128CBCInfo.characters.count
-	static private let AESIVInHexLength = 32
-	static private let AESHeaderLength = AESInfoLength + AESIVInHexLength
-	
-	static private func getIV(strippedKey: String) throws -> NSData {
-		let ivInHex = strippedKey.substringWithRange(strippedKey.startIndex+AESInfoLength..<strippedKey.startIndex+AESHeaderLength)
-		guard let iv = ivInHex.dataFromHexadecimalString() else {
-			throw error("SwEncryptedPrivateKey invalid IV")
-		}
-		return iv
-	}
-	
-	static private func getAESKeyAndIV(strippedKey: String, passphrase: String) throws -> (NSData, NSData) {
-		if strippedKey.hasPrefix(AES128CBCInfo) {
-			let iv = try getIV(strippedKey)
-			let aesKey = getAES128Key(passphrase, iv: iv)
-			return (aesKey, iv)
-		}
-		if strippedKey.hasPrefix(AES256CBCInfo) {
-			let iv = try getIV(strippedKey)
-			let aesKey = getAES256Key(passphrase, iv: iv)
-			return (aesKey, iv)
-		}
-		throw error("SwEncryptedPrivateKey can't parse encrypted header")
-	}
-	
-	static private func decryptPEM(strippedKey: String, passphrase: String) throws -> NSData {
-		let (aesKey,iv) = try getAESKeyAndIV(strippedKey, passphrase: passphrase)
-		let base64Data = strippedKey.substringFromIndex(strippedKey.startIndex+AESHeaderLength)
-		guard let data = NSData(base64EncodedString: base64Data, options: [.IgnoreUnknownCharacters]) else {
-			throw error("SwEncryptedPrivateKey can't base64 decode PEM data")
-		}
-		let decrypted = try CC.AESDecrypt(data, key: aesKey, iv: iv, blockMode: .CBC)
-		return decrypted
-	}
-	
-	static private func getAES128Key(passphrase: String, iv: NSData) -> NSData {
-		//128bit_Key = MD5(Passphrase + Salt)
-		let pass = passphrase.dataUsingEncoding(NSUTF8StringEncoding)!
-		let salt = iv.subdataWithRange(NSRange(location: 0, length: 8))
-		
-		let key = NSMutableData()
-		key.appendData(pass)
-		key.appendData(salt)
-		return CC.md5(key)
-	}
-	
-	static private func getAES256Key(passphrase: String, iv: NSData) -> NSData {
-		//128bit_Key = MD5(Passphrase + Salt)
-		//256bit_Key = 128bit_Key + MD5(128bit_Key + Passphrase + Salt)
-		let pass = passphrase.dataUsingEncoding(NSUTF8StringEncoding)!
-		let salt = iv.subdataWithRange(NSRange(location: 0, length: 8))
-		
-		let first = NSMutableData()
-		first.appendData(pass)
-		first.appendData(salt)
-		let aes128Key = CC.md5(first)
-		
-		let sec = NSMutableData()
-		sec.appendData(aes128Key)
-		sec.appendData(pass)
-		sec.appendData(salt)
-		
-		let aes256Key = NSMutableData()
-		aes256Key.appendData(aes128Key)
-		aes256Key.appendData(CC.md5(sec))
-		return aes256Key
-	}
-	
-	static private func encryptPrivateKeyAES128CBC(keyData: NSData, passphrase: String) -> String {
-		let iv = CC.generateRandom(16)
-		let aesKey = getAES128Key(passphrase, iv: iv)
-		let encrypted = try! CC.AESEncrypt(keyData, key: aesKey, iv: iv, blockMode: .CBC)
-		return AES128CBCInfo + iv.hexadecimalString() + "\n\n" +
-			encrypted.base64EncodedStringWithOptions(
-				[.Encoding64CharacterLineLength,.EncodingEndLineWithLineFeed])
-	}
-	
-	static private func encryptPrivateKeyAES256CBC(keyData: NSData, passphrase: String) -> String {
-		let iv = CC.generateRandom(16)
-		let aesKey = getAES256Key(passphrase, iv: iv)
-		let encrypted = try! CC.AESEncrypt(keyData, key: aesKey, iv: iv, blockMode: .CBC)
-		return AES256CBCInfo + iv.hexadecimalString() + "\n\n" +
-			encrypted.base64EncodedStringWithOptions(
-				[.Encoding64CharacterLineLength,.EncodingEndLineWithLineFeed])
-	}
-	
-	static private func encryptKeyData(keyData: NSData, passphrase: String, mode: Mode) -> String {
-		switch mode {
-		case .AES128CBC: return encryptPrivateKeyAES128CBC(keyData, passphrase: passphrase)
-		case .AES256CBC: return encryptPrivateKeyAES256CBC(keyData, passphrase: passphrase)
-		}
+		let derKey = try PEM.EncryptedPrivateKey.toDER(pemKey, passphrase: passphrase)
+		return PEM.PrivateKey.toPEM(derKey)
 	}
 	
 }
 
-public class SwPublicKey {
+private class PKCS8 {
 	
-	static public func getPEMFromKeyData(keyData: NSData) -> String {
-		let keyDataWithHeader = addX509Header(keyData)
-		return addPEMPreSuffix(keyDataWithHeader.base64EncodedStringWithOptions(
-			[.Encoding64CharacterLineLength,.EncodingEndLineWithLineFeed]))
-	}
-	
-	static public func getKeyDataFromPEM(pemKey: String) throws -> NSData {
-		let base64key = try stripPEMHeader(pemKey)
-		guard let x509Data = NSData(base64EncodedString: base64key, options: [.IgnoreUnknownCharacters]) else {
-			throw error("SwPublicKey: can't base64 decode PEM data")
-		}
-		return try stripX509Header(x509Data)
-	}
-	
-	static private let PEMPrefix = "-----BEGIN PUBLIC KEY-----\n"
-	static private let PEMSuffix = "\n-----END PUBLIC KEY-----"
-	
-	static private func stripPEMHeader(pemKey: String) throws -> String {
-		guard pemKey.hasPrefix(PEMPrefix) else {
-			throw error("SwPublicKey: prefix header hasn't found")
-		}
-		guard let r = pemKey.rangeOfString(PEMSuffix) else {
-			throw error("SwPublicKey: found prefix header but not suffix")
-		}
-		return pemKey.substringWithRange(PEMPrefix.endIndex..<r.startIndex)
-	}
+	private class PrivateKey {
 		
-	static private func addPEMPreSuffix(base64: String) -> String {
-		return PEMPrefix + base64 + PEMSuffix
-	}
-	
-	static private func addX509Header(keyData: NSData) -> NSData {
-		let result = NSMutableData()
-		
-		let encodingLength: Int = encodedOctets(keyData.length + 1).count
-		let OID: [UInt8] = [0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
-							0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00]
-		
-		var builder: [UInt8] = []
-		
-		// ASN.1 SEQUENCE
-		builder.append(0x30)
-		
-		// Overall size, made of OID + bitstring encoding + actual key
-		let size = OID.count + 2 + encodingLength + keyData.length
-		let encodedSize = encodedOctets(size)
-		builder.appendContentsOf(encodedSize)
-		result.appendBytes(builder, length: builder.count)
-		result.appendBytes(OID, length: OID.count)
-		builder.removeAll(keepCapacity: false)
-		
-		builder.append(0x03)
-		builder.appendContentsOf(encodedOctets(keyData.length + 1))
-		builder.append(0x00)
-		result.appendBytes(builder, length: builder.count)
-		
-		// Actual key bytes
-		result.appendData(keyData)
-		
-		return result as NSData
-	}
-	
-	//https://lapo.it/asn1js/
-	static private func stripX509Header(keyData: NSData) throws -> NSData {
-		var bytes = keyData.arrayOfBytes()
-		
-		var offset = 0
-		guard bytes[offset] == 0x30 else {
-			throw error("SwPublicKey: ASN1 parse failed")
-		}
-		
-		offset += 1
+		//https://lapo.it/asn1js/
+		static private func stripHeaderIfAny(keyData: NSData) throws -> NSData {
+			var bytes = keyData.arrayOfBytes()
 			
-		if bytes[offset] > 0x80 {
-			offset += Int(bytes[offset]) - 0x80
-		}
-		offset += 1
-		
-		//without header
-		if bytes[offset] == 0x02 {
-			return keyData
-		}
-		
-		let OID: [UInt8] = [0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
-							0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00]
-		let slice: [UInt8] = Array(bytes[offset..<(offset + OID.count)])
+			var offset = 0
+			guard bytes[offset] == 0x30 else {
+				throw SwError.ASN1Parse
+			}
+			offset += 1
 			
-		guard slice == OID else {
-			throw error("SwPublicKey: ASN1 parse failed")
-		}
+			if bytes[offset] > 0x80 {
+				offset += Int(bytes[offset]) - 0x80
+			}
+			offset += 1
 			
-		offset += OID.count
-				
-		// Type
-		guard bytes[offset] == 0x03 else {
-			throw error("SwPublicKey: ASN1 parse failed")
+			guard bytes[offset] == 0x02 else {
+				throw SwError.ASN1Parse
+			}
+			offset += 3
+			
+			//without PKCS8 header
+			if bytes[offset] == 0x02 {
+				return keyData
+			}
+			
+			let OID: [UInt8] = [0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
+			                    0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00]
+			let slice: [UInt8] = Array(bytes[offset..<(offset + OID.count)])
+			
+			guard slice == OID else {
+				throw SwError.ASN1Parse
+			}
+			
+			offset += OID.count
+			guard bytes[offset] == 0x04 else {
+				throw SwError.ASN1Parse
+			}
+			
+			offset += 1
+			if bytes[offset] > 0x80 {
+				offset += Int(bytes[offset]) - 0x80
+			}
+			offset += 1
+			
+			guard bytes[offset] == 0x30 else {
+				throw SwError.ASN1Parse
+			}
+			
+			return keyData.subdataWithRange(NSRange(location: offset, length: keyData.length - offset))
 		}
-				
-		offset += 1
-				
-		if bytes[offset] > 0x80 {
-			offset += Int(bytes[offset]) - 0x80
-		}
-		offset += 1
-				
-		// Contents should be separated by a null from the header
-		guard bytes[offset] == 0x00 else {
-			throw error("SwPublicKey: ASN1 parse failed")
-		}
-				
-		offset += 1
-		return keyData.subdataWithRange(NSRange(location: offset, length: keyData.length - offset))
 	}
+	
+	class PublicKey {
+		
+		static private func addHeader(keyData: NSData) -> NSData {
+			let result = NSMutableData()
+			
+			let encodingLength: Int = encodedOctets(keyData.length + 1).count
+			let OID: [UInt8] = [0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
+			                    0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00]
+			
+			var builder: [UInt8] = []
+			
+			// ASN.1 SEQUENCE
+			builder.append(0x30)
+			
+			// Overall size, made of OID + bitstring encoding + actual key
+			let size = OID.count + 2 + encodingLength + keyData.length
+			let encodedSize = encodedOctets(size)
+			builder.appendContentsOf(encodedSize)
+			result.appendBytes(builder, length: builder.count)
+			result.appendBytes(OID, length: OID.count)
+			builder.removeAll(keepCapacity: false)
+			
+			builder.append(0x03)
+			builder.appendContentsOf(encodedOctets(keyData.length + 1))
+			builder.append(0x00)
+			result.appendBytes(builder, length: builder.count)
+			
+			// Actual key bytes
+			result.appendData(keyData)
+			
+			return result as NSData
+		}
+		
+		//https://lapo.it/asn1js/
+		static private func stripHeaderIfAny(keyData: NSData) throws -> NSData {
+			var bytes = keyData.arrayOfBytes()
+			
+			var offset = 0
+			guard bytes[offset] == 0x30 else {
+				throw SwError.ASN1Parse
+			}
+			
+			offset += 1
+			
+			if bytes[offset] > 0x80 {
+				offset += Int(bytes[offset]) - 0x80
+			}
+			offset += 1
+			
+			//without PKCS8 header
+			if bytes[offset] == 0x02 {
+				return keyData
+			}
+			
+			let OID: [UInt8] = [0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
+			                    0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00]
+			let slice: [UInt8] = Array(bytes[offset..<(offset + OID.count)])
+			
+			guard slice == OID else {
+				throw SwError.ASN1Parse
+			}
+			
+			offset += OID.count
+			
+			// Type
+			guard bytes[offset] == 0x03 else {
+				throw SwError.ASN1Parse
+			}
+			
+			offset += 1
+			
+			if bytes[offset] > 0x80 {
+				offset += Int(bytes[offset]) - 0x80
+			}
+			offset += 1
+			
+			// Contents should be separated by a null from the header
+			guard bytes[offset] == 0x00 else {
+				throw SwError.ASN1Parse
+			}
+			
+			offset += 1
+			return keyData.subdataWithRange(NSRange(location: offset, length: keyData.length - offset))
+		}
+		
+		static private func encodedOctets(int: Int) -> [UInt8] {
+			// Short form
+			if int < 128 {
+				return [UInt8(int)];
+			}
+			
+			// Long form
+			let i = (int / 256) + 1
+			var len = int
+			var result: [UInt8] = [UInt8(i + 0x80)]
+			
+			for _ in 0..<i {
+				result.insert(UInt8(len & 0xFF), atIndex: 1)
+				len = len >> 8
+			}
+			
+			return result
+		}
+	}
+}
 
-	static private func encodedOctets(int: Int) -> [UInt8] {
-		// Short form
-		if int < 128 {
-			return [UInt8(int)];
+private class PEM {
+	
+	private class PrivateKey {
+		
+		static private func toDER(pemKey: String) throws -> NSData {
+			let strippedKey = try stripHeader(pemKey)
+			guard let data = NSData(base64EncodedString: strippedKey, options: [.IgnoreUnknownCharacters]) else {
+				throw SwError.Base64Decoding
+			}
+			return data
 		}
 		
-		// Long form
-		let i = (int / 256) + 1
-		var len = int
-		var result: [UInt8] = [UInt8(i + 0x80)]
-		
-		for _ in 0..<i {
-			result.insert(UInt8(len & 0xFF), atIndex: 1)
-			len = len >> 8
+		static private func toPEM(derKey: NSData) -> String {
+			let base64 = derKey.base64EncodedStringWithOptions(
+				[.Encoding64CharacterLineLength,.EncodingEndLineWithLineFeed])
+			return addRSAHeader(base64)
 		}
 		
-		return result
+		static private let Prefix = "-----BEGIN PRIVATE KEY-----\n"
+		static private let Suffix = "\n-----END PRIVATE KEY-----"
+		static private let RSAPrefix = "-----BEGIN RSA PRIVATE KEY-----\n"
+		static private let RSASuffix = "\n-----END RSA PRIVATE KEY-----"
+		
+		static private func addHeader(base64: String) -> String {
+			return Prefix + base64 + Suffix
+		}
+		
+		static private func addRSAHeader(base64: String) -> String {
+			return RSAPrefix + base64 + RSASuffix
+		}
+		
+		static private func stripHeader(pemKey: String) throws -> String {
+			if pemKey.hasPrefix(Prefix) {
+				guard let r = pemKey.rangeOfString(Suffix) else {
+					throw SwError.PEMParse
+				}
+				return pemKey.substringWithRange(Prefix.endIndex..<r.startIndex)
+			}
+			if pemKey.hasPrefix(RSAPrefix) {
+				guard let r = pemKey.rangeOfString(RSASuffix) else {
+					throw SwError.PEMParse
+				}
+				return pemKey.substringWithRange(RSAPrefix.endIndex..<r.startIndex)
+			}
+			throw SwError.PEMParse
+		}
 	}
+	
+	private class PublicKey {
+		
+		static private func toDER(pemKey: String) throws -> NSData {
+			let strippedKey = try stripHeader(pemKey)
+			guard let data = NSData(base64EncodedString: strippedKey,
+			                        options: [.IgnoreUnknownCharacters]) else {
+										throw SwError.Base64Decoding
+			}
+			return data
+		}
+		
+		static private func toPEM(derKey: NSData) -> String {
+			let base64 = derKey.base64EncodedStringWithOptions(
+				[.Encoding64CharacterLineLength,.EncodingEndLineWithLineFeed])
+			return addHeader(base64)
+		}
+		
+		static private let PEMPrefix = "-----BEGIN PUBLIC KEY-----\n"
+		static private let PEMSuffix = "\n-----END PUBLIC KEY-----"
+		
+		static private func addHeader(base64: String) -> String {
+			return PEMPrefix + base64 + PEMSuffix
+		}
+		
+		static private func stripHeader(pemKey: String) throws -> String {
+			guard pemKey.hasPrefix(PEMPrefix) else {
+				throw SwError.PEMParse
+			}
+			guard let r = pemKey.rangeOfString(PEMSuffix) else {
+				throw SwError.PEMParse
+			}
+			return pemKey.substringWithRange(PEMPrefix.endIndex..<r.startIndex)
+		}
+	}
+	
+	private class EncryptedPrivateKey {
+		typealias Mode = SwEncryptedPrivateKey.Mode
+		
+		static private func toDER(pemKey: String, passphrase: String) throws -> NSData {
+			let strippedKey = try PEM.PrivateKey.stripHeader(pemKey)
+			return try decryptPEM(strippedKey, passphrase: passphrase)
+		}
+		
+		static private func toPEM(derKey: NSData, passphrase: String, mode: Mode) throws -> String {
+			let encryptedDERKey = try encryptDERKey(derKey, passphrase: passphrase, mode: mode)
+			return PEM.PrivateKey.addRSAHeader(encryptedDERKey)
+		}
+		
+		static private let AES128CBCInfo = "Proc-Type: 4,ENCRYPTED\nDEK-Info: AES-128-CBC,"
+		static private let AES256CBCInfo = "Proc-Type: 4,ENCRYPTED\nDEK-Info: AES-256-CBC,"
+		static private let AESInfoLength = AES128CBCInfo.characters.count
+		static private let AESIVInHexLength = 32
+		static private let AESHeaderLength = AESInfoLength + AESIVInHexLength
+		
+		static private func encryptDERKeyAES128CBC(derKey: NSData, passphrase: String) throws -> String {
+			let iv = try CC.generateRandom(16)
+			let aesKey = getAES128Key(passphrase, iv: iv)
+			let encrypted = try CC.crypt(.encrypt, blockMode: .CBC, algorithm: .AES, padding: .PKCS7Padding, data: derKey, key: aesKey, iv: iv)
+			return AES128CBCInfo + iv.hexadecimalString() + "\n\n" +
+				encrypted.base64EncodedStringWithOptions(
+					[.Encoding64CharacterLineLength,.EncodingEndLineWithLineFeed])
+		}
+		
+		static private func encryptDERKeyAES256CBC(derKey: NSData, passphrase: String) throws -> String {
+			let iv = try CC.generateRandom(16)
+			let aesKey = getAES256Key(passphrase, iv: iv)
+			let encrypted = try CC.crypt(.encrypt, blockMode: .CBC, algorithm: .AES, padding: .PKCS7Padding, data: derKey, key: aesKey, iv: iv)
+			return AES256CBCInfo + iv.hexadecimalString() + "\n\n" +
+				encrypted.base64EncodedStringWithOptions(
+					[.Encoding64CharacterLineLength,.EncodingEndLineWithLineFeed])
+		}
+		
+		static private func encryptDERKey(derKey: NSData, passphrase: String, mode: Mode) throws -> String {
+			switch mode {
+			case .AES128CBC: return try encryptDERKeyAES128CBC(derKey, passphrase: passphrase)
+			case .AES256CBC: return try encryptDERKeyAES256CBC(derKey, passphrase: passphrase)
+			}
+		}
+		
+		static private func decryptPEM(strippedKey: String, passphrase: String) throws -> NSData {
+			let iv = try getIV(strippedKey)
+			let aesKey = try getAESKey(strippedKey, passphrase: passphrase, iv: iv)
+			let base64Data = strippedKey.substringFromIndex(strippedKey.startIndex+AESHeaderLength)
+			guard let data = NSData(base64EncodedString: base64Data,
+			                        options: [.IgnoreUnknownCharacters]) else {
+										throw SwError.Base64Decoding
+			}
+			let decrypted = try CC.crypt(.decrypt, blockMode: .CBC, algorithm: .AES, padding: .PKCS7Padding, data: data, key: aesKey, iv: iv)
+			return decrypted
+		}
+		
+		static private func getIV(strippedKey: String) throws -> NSData {
+			let ivInHex = strippedKey.substringWithRange(strippedKey.startIndex+AESInfoLength..<strippedKey.startIndex+AESHeaderLength)
+			guard let iv = ivInHex.dataFromHexadecimalString() else {
+				throw SwError.PEMParse
+			}
+			return iv
+		}
+		
+		static private func getAESKey(strippedKey: String, passphrase: String, iv: NSData) throws -> NSData {
+			if strippedKey.hasPrefix(AES128CBCInfo) {
+				return getAES128Key(passphrase, iv: iv)
+			}
+			if strippedKey.hasPrefix(AES256CBCInfo) {
+				return getAES256Key(passphrase, iv: iv)
+			}
+			throw SwError.PEMParse
+		}
+		
+		static private func getAES128Key(passphrase: String, iv: NSData) -> NSData {
+			//128bit_Key = MD5(Passphrase + Salt)
+			let pass = passphrase.dataUsingEncoding(NSUTF8StringEncoding)!
+			let salt = iv.subdataWithRange(NSRange(location: 0, length: 8))
+			
+			let key = NSMutableData()
+			key.appendData(pass)
+			key.appendData(salt)
+			return CC.md5(key)
+		}
+		
+		static private func getAES256Key(passphrase: String, iv: NSData) -> NSData {
+			//128bit_Key = MD5(Passphrase + Salt)
+			//256bit_Key = 128bit_Key + MD5(128bit_Key + Passphrase + Salt)
+			let pass = passphrase.dataUsingEncoding(NSUTF8StringEncoding)!
+			let salt = iv.subdataWithRange(NSRange(location: 0, length: 8))
+			
+			let first = NSMutableData()
+			first.appendData(pass)
+			first.appendData(salt)
+			let aes128Key = CC.md5(first)
+			
+			let sec = NSMutableData()
+			sec.appendData(aes128Key)
+			sec.appendData(pass)
+			sec.appendData(salt)
+			
+			let aes256Key = NSMutableData()
+			aes256Key.appendData(aes128Key)
+			aes256Key.appendData(CC.md5(sec))
+			return aes256Key
+		}
+		
+	}
+	
 }
 
 
 //Simple Encrypted Message
 public class SEM {
 	
-	public enum AesMode : UInt8 {
+	public enum AESMode : UInt8 {
 		case AES128, AES192, AES256
 		
 		var keySize: Int {
@@ -483,7 +540,7 @@ public class SEM {
 	}
 	
 	public struct Mode {
-		let aes: AesMode
+		let aes: AESMode
 		let block: BlockMode
 		let hmac: HMACMode
 		public init() {
@@ -491,7 +548,7 @@ public class SEM {
 			block = .CBC
 			hmac = .SHA256
 		}
-		public init(aes: AesMode, block: BlockMode, hmac: HMACMode) {
+		public init(aes: AESMode, block: BlockMode, hmac: HMACMode) {
 			self.aes = aes
 			self.block = block
 			self.hmac = hmac
@@ -499,30 +556,32 @@ public class SEM {
 	}
 	
 	static public func encryptMessage(message: String, pemKey: String, mode: Mode) throws -> String {
-		guard let data = message.dataUsingEncoding(NSUTF8StringEncoding) else {
-			throw error("SEM: can't get UTF8 from the message")
-		}
+		let data = message.dataUsingEncoding(NSUTF8StringEncoding)!
 		let encryptedData = try encryptData(data, pemKey: pemKey, mode: mode)
 		return encryptedData.base64EncodedStringWithOptions([])
 	}
 	
 	static public func decryptMessage(message: String, pemKey: String) throws -> String {
 		guard let data = NSData(base64EncodedString: message, options: []) else {
-			throw error("SEM: can't decode base64 string")
+			throw SwError.Base64Decoding
 		}
 		let decryptedData = try decryptData(data, pemKey: pemKey)
 		guard let decryptedString = String(data: decryptedData, encoding: NSUTF8StringEncoding) else {
-			throw error("SEM: can't get UTF8 from the message")
+			throw SwError.UTF8Decoding
 		}
 		return decryptedString
 	}
 	
 	static public func encryptData(data: NSData, pemKey: String, mode: Mode) throws -> NSData {
-		let aesKey = CC.generateRandom(mode.aes.keySize)
-		let IV = CC.generateRandom(mode.block.ivSize)
-		let header = getMessageHeader(mode, aesKey: aesKey, IV: IV)
-		let encryptedHeader = try CCRSA.encrypt(header, pemKey: pemKey, padding: .OAEP, digest: .SHA1)
-		let encryptedData = try CC.AESEncrypt(data, key: aesKey, iv: IV, blockMode: mode.block.cc)
+		let aesKey = try CC.generateRandom(mode.aes.keySize)
+		let iv = try CC.generateRandom(mode.block.ivSize)
+		let header = getMessageHeader(mode, aesKey: aesKey, iv: iv)
+		let derKey = try SwPublicKey.pemToPKCS1DER(pemKey)
+		
+		let encryptedHeader = try CCRSA.encrypt(header, derKey: derKey, padding: .OAEP, digest: .SHA1)
+		let encryptedData = try CC.crypt(.encrypt, blockMode: mode.block.cc,
+		                                 algorithm: .AES, padding: .PKCS7Padding,
+		                                 data: data, key: aesKey, iv: iv)
 		
 		let result = NSMutableData()
 		result.appendData(encryptedHeader)
@@ -535,12 +594,13 @@ public class SEM {
 	
 	
 	static public func decryptData(data: NSData, pemKey: String) throws -> NSData {
-		let (header, tail) = try CCRSA.decrypt(data, pemKey: pemKey, padding: .OAEP, digest: .SHA1)
+		let derKey = try SwPrivateKey.pemToPKCS1DER(pemKey)
+		let (header, tail) =  try CCRSA.decrypt(data, derKey: derKey, padding: .OAEP, digest: .SHA1)
 		let (mode, aesKey, iv) = try parseMessageHeader(header)
 		
 		try checkHMAC(data, aesKey: aesKey, mode: mode.hmac)
-		let aesData = tail.subdataWithRange(NSRange(location: 0, length: tail.length - mode.hmac.digestLength))
-		return try CC.AESDecrypt(aesData, key: aesKey, iv: iv, blockMode: mode.block.cc)
+		let encryptedData = tail.subdataWithRange(NSRange(location: 0, length: tail.length - mode.hmac.digestLength))
+		return try CC.crypt(.decrypt, blockMode: mode.block.cc, algorithm: .AES, padding: .PKCS7Padding, data: encryptedData, key: aesKey, iv: iv)
 	}
 	
 	static private func checkHMAC(data: NSData, aesKey: NSData, mode: SEM.HMACMode) throws {
@@ -548,37 +608,37 @@ public class SEM {
 			let hmaccedData = data.subdataWithRange(NSRange(location: 0, length: data.length - mode.digestLength))
 			let hmac = data.subdataWithRange(NSRange(location: data.length - mode.digestLength, length: mode.digestLength))
 			guard CC.HMAC(hmaccedData, alg: mode.cc!, key: aesKey) == hmac else {
-				throw error("SEM: invalid message (HMAC)")
+				throw SwError.MessageAuthentication
 			}
 		}
 	}
 	
-	static private func getMessageHeader(mode: Mode, aesKey: NSData, IV: NSData) -> NSData {
+	static private func getMessageHeader(mode: Mode, aesKey: NSData, iv: NSData) -> NSData {
 		let header : [UInt8] = [mode.aes.rawValue, mode.block.rawValue, mode.hmac.rawValue]
 		let message = NSMutableData(bytes: header, length: 3)
 		message.appendData(aesKey)
-		message.appendData(IV)
+		message.appendData(iv)
 		return message
 	}
 	
 	static private func parseMessageHeader(header: NSData) throws -> (Mode, NSData, NSData) {
 		guard header.length > 3 else {
-			throw error("SEM: invalid header length: \(header.length)")
+			throw SwError.SEMParse
 		}
 		let bytes = header.arrayOfBytes()
-		guard let aes = AesMode(rawValue: bytes[0]) else {
-			throw error("SEM: invalid aes mode: \(bytes[0])")
+		guard let aes = AESMode(rawValue: bytes[0]) else {
+			throw SwError.SEMParse
 		}
 		guard let block = BlockMode(rawValue: bytes[1]) else {
-			throw error("SEM: invalid block mode: \(bytes[1])")
+			throw SwError.SEMParse
 		}
 		guard let hmac = HMACMode(rawValue: bytes[2]) else {
-			throw error("SEM: invalid hmac mode: \(bytes[2])")
+			throw SwError.SEMParse
 		}
 		let keySize = aes.keySize
 		let ivSize = block.ivSize
 		guard header.length == 3 + keySize + ivSize else {
-			throw error("SEM: invalid header length: \(header.length)")
+			throw SwError.SEMParse
 		}
 		let key = header.subdataWithRange(NSRange(location: 3, length: keySize))
 		let iv = header.subdataWithRange(NSRange(location: 3 + keySize, length: ivSize))
@@ -587,120 +647,31 @@ public class SEM {
 	}	
 }
 
-public class CCRSA {
-	public enum AsymmetricPadding {
-		case PKCS1, OAEP
-		
-		var cc : CCAsymmetricPadding {
-			switch self {
-			case .PKCS1: return CCAsymmetricPadding(ccPKCS1Padding)
-			case .OAEP: return CCAsymmetricPadding(ccOAEPPadding)
-			}
-		}
+public enum CCError : CCCryptorStatus, ErrorType {
+	case ParamError = -4300
+	case BufferTooSmall = -4301
+	case MemoryFailure = -4302
+	case AlignmentError = -4303
+	case DecodeError = -4304
+	case Unimplemented = -4305
+	case Overflow = -4306
+	case RNGFailure = -4307
+	case Unknown = -2147483648
+	init(status: CCCryptorStatus) {
+		self = CCError(rawValue: status) ?? .Unknown
 	}
-	
-	public enum DigestAlgorithm {
-		case None, SHA1, SHA224, SHA256, SHA384, SHA512
-		
-		var cc: CCDigestAlgorithm {
-			switch self {
-			case .None: return CCDigestAlgorithm(kCCDigestNone)
-			case .SHA1: return CCDigestAlgorithm(kCCDigestSHA1)
-			case .SHA224: return CCDigestAlgorithm(kCCDigestSHA224)
-			case .SHA256: return CCDigestAlgorithm(kCCDigestSHA256)
-			case .SHA384: return CCDigestAlgorithm(kCCDigestSHA384)
-			case .SHA512: return CCDigestAlgorithm(kCCDigestSHA512)
-			}
-		}
-	}
-	
-	static public func generateKeyPair(keySize: Int = 4096) throws -> (String, String) {
-		var privateKey: CCRSACryptorRef = nil
-		var publicKey: CCRSACryptorRef = nil
-		var status = CCRSACryptorGeneratePair(keySize, 65537, &publicKey, &privateKey)
+	static func check(status: CCCryptorStatus) throws {
 		guard status == noErr else {
-			throw error("CCRSACryptorGeneratePair failed \(status)")
+			throw CCError(status: status)
 		}
-		defer {	CCRSACryptorRelease(privateKey) }
-		defer { CCRSACryptorRelease(publicKey) }
-		
-		let privKeyData = try getKeyDataFromRSAKey(privateKey)
-		let pubKeyData = try getKeyDataFromRSAKey(publicKey)
-		
-		let privPEM = SwPrivateKey.getPEMFromKeyData(privKeyData)
-		let pubPEM = SwPublicKey.getPEMFromKeyData(pubKeyData)
-		return (privPEM, pubPEM)
 	}
-	
-	static public func encrypt(data: NSData, pemKey: String, padding: AsymmetricPadding, digest: DigestAlgorithm) throws -> NSData {
-		let keyData = try SwPublicKey.getKeyDataFromPEM(pemKey)
-		let key = try getRSAKeyFromKeyData(keyData)
-		defer { CCRSACryptorRelease(key) }
-		
-		var bufferSize = Int(CCRSAGetKeySize(key)/8)
-		let buffer = NSMutableData(length: bufferSize)!
-		
-		let status = CCRSACryptorEncrypt(key, padding.cc, data.bytes, data.length, buffer.mutableBytes, &bufferSize, nil, 0, digest.cc)
-		guard status == noErr else {
-			throw error("CCRSACryptorEncrypt failed \(status)")
-		}
-		return buffer
-	}
-	
-	static public func decrypt(data: NSData, pemKey: String, padding: AsymmetricPadding, digest: DigestAlgorithm) throws -> (NSData, NSData) {
-		let keyData = try SwPrivateKey.getKeyDataFromPEM(pemKey)
-		let key = try getRSAKeyFromKeyData(keyData)
-		defer { CCRSACryptorRelease(key) }
-		
-		let blockSize = Int(CCRSAGetKeySize(key) / 8)
-		var bufferSize = blockSize
-		let buffer = NSMutableData(length: bufferSize)!
-		
-		let status = CCRSACryptorDecrypt(key, padding.cc, data.bytes, bufferSize, buffer.mutableBytes, &bufferSize, nil, 0, digest.cc)
-		guard status == noErr else {
-			throw error("CCRSACryptorDecrypt failed \(status)")
-		}
-		buffer.length = bufferSize
-		let tail = data.subdataWithRange(NSRange(location: blockSize, length: data.length - blockSize))
-		return (buffer, tail)
-	}
-
-	static private func getRSAKeyFromKeyData(keyData: NSData) throws -> CCRSACryptorRef {
-		var key : CCRSACryptorRef = nil
-		let status = CCRSACryptorImport(keyData.bytes, keyData.length, &key)
-		guard status == noErr else {
-			throw error("CCRSACryptorImport failed \(status)")
-		}
-		return key
-	}
-	
-	static private func getKeyDataFromRSAKey(key: CCRSACryptorRef) throws -> NSData {
-		var keyDataLength = 8192
-		let keyData = NSMutableData(length: keyDataLength)!
-		let status = CCRSACryptorExport(key, keyData.mutableBytes, &keyDataLength)
-		guard status == noErr else {
-			throw error("CCRSACryptorExport failed \(status)")
-		}
-		keyData.length = keyDataLength
-		return keyData
-	}
-	
 }
 
 public class CC {
 	
-	static public func AESEncrypt(data: NSData, key: NSData, iv: NSData, blockMode: BlockMode) throws -> NSData {
-		return try AESCrypt(.encrypt, data: data, key: key, iv: iv, blockMode: blockMode)
-	}
-	
-	static public func AESDecrypt(data: NSData, key: NSData, iv: NSData, blockMode: BlockMode) throws -> NSData {
-		return try AESCrypt(.decrypt, data: data, key: key, iv: iv, blockMode: blockMode)
-	}
-	
-	
-	static public func generateRandom(size: Int) -> NSData {
+	static public func generateRandom(size: Int) throws -> NSData {
 		let data = NSMutableData(length: size)!
-		CCRandomCopyBytes(kCCRandomDefault, data.mutableBytes, size)
+		try CCError.check(CCRandomGenerateBytes(data.mutableBytes, size))
 		return data
 	}
 	
@@ -740,19 +711,9 @@ public class CC {
 		return result
 	}
 	
-	public enum HMACAlg {
+	public enum HMACAlg : CCHmacAlgorithm {
 		case SHA1, MD5, SHA256, SHA384, SHA512, SHA224
 		
-		var cc: CCHmacAlgorithm {
-			switch self {
-			case .SHA1: return CCHmacAlgorithm(kCCHmacAlgSHA1)
-			case .MD5: return CCHmacAlgorithm(kCCHmacAlgMD5)
-			case .SHA256: return CCHmacAlgorithm(kCCHmacAlgSHA256)
-			case .SHA384: return CCHmacAlgorithm(kCCHmacAlgSHA384)
-			case .SHA512: return CCHmacAlgorithm(kCCHmacAlgSHA512)
-			case .SHA224: return CCHmacAlgorithm(kCCHmacAlgSHA224)
-			}
-		}
 		var digestLength: Int {
 			switch self {
 			case .SHA1: return Int(CC_SHA1_DIGEST_LENGTH)
@@ -765,73 +726,134 @@ public class CC {
 		}
 	}
 
-	
 	static public func HMAC(data: NSData, alg: HMACAlg, key: NSData) -> NSData {
 		let buffer = NSMutableData(length: alg.digestLength)!
-		CCHmac(alg.cc, key.bytes, key.length, data.bytes, data.length, buffer.mutableBytes)
+		CCHmac(alg.rawValue, key.bytes, key.length, data.bytes, data.length, buffer.mutableBytes)
 		return buffer
 	}
 	
-	private enum OpMode {
-		case encrypt, decrypt
-		
-		var cc: CCOperation {
-			switch self {
-			case .encrypt: return CCOperation(kCCEncrypt)
-			case .decrypt: return CCOperation(kCCDecrypt)
-			}
-		}
+	public enum OpMode : CCOperation{
+		case encrypt = 0, decrypt
 	}
 	
-	public enum BlockMode {
-		case ECB, CBC, CFB, CTR, OFB, XTS, RC4, CFB8, GCM
-		
-		var cc: CCMode {
-			switch self {
-			case .ECB: return CCMode(kCCModeECB)
-			case .CBC: return CCMode(kCCModeCBC)
-			case .CFB: return CCMode(kCCModeCFB)
-			case .CTR: return CCMode(kCCModeCTR)
-			case .OFB: return CCMode(kCCModeOFB)
-			case .XTS: return CCMode(kCCModeXTS)
-			case .RC4: return CCMode(kCCModeRC4)
-			case .CFB8: return CCMode(kCCModeCFB8)
-			case .GCM: return CCMode(11/*kCCModeGCM*/)
-			}
-		}
+	public enum BlockMode : CCMode {
+		case ECB = 1, CBC, CFB, CTR, F8, LRW, OFB, XTS, RC4, CFB8, GCM
 	}
 	
-	static private func AESCrypt(opMode: OpMode, data: NSData, key: NSData, iv: NSData, blockMode: BlockMode) throws -> NSData {
+	public enum Algorithm : CCAlgorithm {
+		case AES = 0, mDES, _3DES, CAST, RC4, RC2, Blowfish
+	}
+	
+	public enum Padding : CCPadding {
+		case NoPadding = 0, PKCS7Padding
+	}
+	
+	static public func crypt(opMode: OpMode, blockMode: BlockMode,
+	                            algorithm: Algorithm, padding: Padding,
+	                            data: NSData, key: NSData, iv: NSData) throws -> NSData {
 		var cryptor : CCCryptorRef = nil
-		var status = CCCryptorCreateWithMode(
-			opMode.cc, blockMode.cc,
-			CCAlgorithm(kCCAlgorithmAES), CCPadding(ccPKCS7Padding),
-			iv.bytes, key.bytes, key.length, nil, 0, 0,	CCModeOptions(), &cryptor)
-		guard status == noErr else {
-			throw error("CCCryptorCreateWithMode failed: \(status)")
-		}
+		try CCError.check(CCCryptorCreateWithMode(
+			opMode.rawValue, blockMode.rawValue,
+			algorithm.rawValue, padding.rawValue,
+			iv.bytes, key.bytes, key.length, nil, 0, 0,	CCModeOptions(), &cryptor))
 		defer { CCCryptorRelease(cryptor) }
 		
 		let needed = CCCryptorGetOutputLength(cryptor, data.length, true)
 		let result = NSMutableData(length: needed)!
 		var updateLen: size_t = 0
-		status = CCCryptorUpdate(cryptor, data.bytes, data.length,
-		                         result.mutableBytes, result.length, &updateLen)
-		guard status == noErr else {
-			throw error("CCCryptorUpdate failed: \(status)")
-		}
+		try CCError.check(CCCryptorUpdate(cryptor, data.bytes, data.length,
+			result.mutableBytes, result.length, &updateLen))
 		
 		var finalLen: size_t = 0
-		status = CCCryptorFinal(cryptor, result.mutableBytes + updateLen,
-		                        result.length - updateLen, &finalLen)
-		guard status == noErr else {
-			throw error("CCCryptorFinal failed: \(status)")
-		}
+		try CCError.check(CCCryptorFinal(cryptor, result.mutableBytes + updateLen,
+			result.length - updateLen, &finalLen))
 		
 		result.length = updateLen + finalLen
 		return result
 	}
+	
 }
+
+public class CCRSA {
+	
+	public enum AsymmetricPadding : CCAsymmetricPadding {
+		case PKCS1 = 1001
+		case OAEP = 1002
+	}
+	
+	public enum DigestAlgorithm : CCDigestAlgorithm {
+		case None = 0
+		case SHA1 = 8
+		case SHA224 = 9
+		case SHA256 = 10
+		case SHA384 = 11
+		case SHA512 = 12
+	}
+	
+	static public func generateKeyPair(keySize: Int = 4096) throws -> (NSData, NSData) {
+		var privateKey: CCRSACryptorRef = nil
+		var publicKey: CCRSACryptorRef = nil
+		try CCError.check(CCRSACryptorGeneratePair(keySize, 65537, &publicKey, &privateKey))
+
+		defer {	CCRSACryptorRelease(privateKey) }
+		defer { CCRSACryptorRelease(publicKey) }
+		
+		let privDERKey = try exportToDERKey(privateKey)
+		let pubDERKey = try exportToDERKey(publicKey)
+		
+		return (privDERKey, pubDERKey)
+	}
+	
+	static public func encrypt(data: NSData, derKey: NSData, padding: AsymmetricPadding,
+	                           digest: DigestAlgorithm) throws -> NSData {
+		let key = try importFromDERKey(derKey)
+		defer { CCRSACryptorRelease(key) }
+		
+		var bufferSize = Int(CCRSAGetKeySize(key)/8)
+		let buffer = NSMutableData(length: bufferSize)!
+		
+		try CCError.check(CCRSACryptorEncrypt(key, padding.rawValue, data.bytes, data.length, buffer.mutableBytes, &bufferSize, nil, 0, digest.rawValue))
+		
+		return buffer
+	}
+	
+	static public func decrypt(data: NSData, derKey: NSData, padding: AsymmetricPadding,
+	                           digest: DigestAlgorithm) throws -> (NSData, NSData) {
+		let key = try importFromDERKey(derKey)
+		defer { CCRSACryptorRelease(key) }
+		
+		let blockSize = Int(CCRSAGetKeySize(key) / 8)
+		
+		guard data.length >= blockSize else {
+			throw CCError.DecodeError
+		}
+		
+		var bufferSize = blockSize
+		let buffer = NSMutableData(length: bufferSize)!
+		
+		try CCError.check(CCRSACryptorDecrypt(key, padding.rawValue, data.bytes, bufferSize, buffer.mutableBytes, &bufferSize, nil, 0, digest.rawValue))
+
+		buffer.length = bufferSize
+		let tail = data.subdataWithRange(NSRange(location: blockSize, length: data.length - blockSize))
+		return (buffer, tail)
+	}
+	
+	static private func importFromDERKey(derKey: NSData) throws -> CCRSACryptorRef {
+		var key : CCRSACryptorRef = nil
+		try CCError.check(CCRSACryptorImport(derKey.bytes, derKey.length, &key))
+		return key
+	}
+	
+	static private func exportToDERKey(key: CCRSACryptorRef) throws -> NSData {
+		var derKeyLength = 8192
+		let derKey = NSMutableData(length: derKeyLength)!
+		try CCError.check(CCRSACryptorExport(key, derKey.mutableBytes, &derKeyLength))
+		derKey.length = derKeyLength
+		return derKey
+	}
+	
+}
+
 
 extension NSData {
 	/// Create hexadecimal string representation of NSData object.

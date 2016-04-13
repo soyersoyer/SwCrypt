@@ -1,7 +1,7 @@
 import XCTest
 import SwCrypt
 
-let keyPair = try? CCRSA.generateKeyPair(2048)
+let keyPair = try? SwCryptTest.createKeyPair(2048)
 
 class SwCryptTest: XCTestCase {
 	
@@ -14,6 +14,13 @@ class SwCryptTest: XCTestCase {
         super.tearDown()
     }
 
+	static func createKeyPair(size: Int) throws -> (String, String) {
+		let keyPair = try CCRSA.generateKeyPair(size)
+		let privKey = SwPrivateKey.derToPKCS1PEM(keyPair.0)
+		let pubKey = SwPublicKey.derToPKCS1PEM(keyPair.1)
+		return (privKey, pubKey)
+	}
+	
     func testCreateKeyPair() {
 		XCTAssert(keyPair != nil)
 	}
