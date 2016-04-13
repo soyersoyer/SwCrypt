@@ -305,7 +305,7 @@ public class SwPublicKey {
 	static public func getKeyDataFromPEM(pemKey: String) throws -> NSData {
 		let base64key = try stripPEMHeader(pemKey)
 		guard let x509Data = NSData(base64EncodedString: base64key, options: [.IgnoreUnknownCharacters]) else {
-			throw error("PublicKey: can't base64 decode PEM data")
+			throw error("SwPublicKey: can't base64 decode PEM data")
 		}
 		return try stripX509Header(x509Data)
 	}
@@ -314,13 +314,13 @@ public class SwPublicKey {
 	static private let PEMSuffix = "\n-----END PUBLIC KEY-----"
 	
 	static private func stripPEMHeader(pemKey: String) throws -> String {
-		if pemKey.hasPrefix(PEMPrefix) {
-			guard let r = pemKey.rangeOfString(PEMSuffix) else {
-				throw error("PublicKey: found prefix header but not suffix")
-			}
-			return pemKey.substringWithRange(PEMPrefix.endIndex..<r.startIndex)
+		guard pemKey.hasPrefix(PEMPrefix) else {
+			throw error("SwPublicKey: prefix header hasn't found")
 		}
-		throw error("PublicKey: prefix header hasn't found")
+		guard let r = pemKey.rangeOfString(PEMSuffix) else {
+			throw error("SwPublicKey: found prefix header but not suffix")
+		}
+		return pemKey.substringWithRange(PEMPrefix.endIndex..<r.startIndex)
 	}
 		
 	static private func addPEMPreSuffix(base64: String) -> String {
@@ -364,7 +364,7 @@ public class SwPublicKey {
 		
 		var offset = 0
 		guard bytes[offset] == 0x30 else {
-			throw error("PublicKey: ASN1 parse failed")
+			throw error("SwPublicKey: ASN1 parse failed")
 		}
 		
 		offset += 1
@@ -384,14 +384,14 @@ public class SwPublicKey {
 		let slice: [UInt8] = Array(bytes[offset..<(offset + OID.count)])
 			
 		guard slice == OID else {
-			throw error("PublicKey: ASN1 parse failed")
+			throw error("SwPublicKey: ASN1 parse failed")
 		}
 			
 		offset += OID.count
 				
 		// Type
 		guard bytes[offset] == 0x03 else {
-			throw error("PublicKey: ASN1 parse failed")
+			throw error("SwPublicKey: ASN1 parse failed")
 		}
 				
 		offset += 1
@@ -403,7 +403,7 @@ public class SwPublicKey {
 				
 		// Contents should be separated by a null from the header
 		guard bytes[offset] == 0x00 else {
-			throw error("PublicKey: ASN1 parse failed")
+			throw error("SwPublicKey: ASN1 parse failed")
 		}
 				
 		offset += 1
