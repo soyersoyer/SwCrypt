@@ -1,16 +1,18 @@
 SwCrypt
 =========
 
-### Create public and private keys in PEM format
+### Create public and private keys in DER format, convert to PEM
 ```
 let (privateKey, publicKey) = try! CCRSA.generateKeyPair(2048)
+let privateKeyPEM = try SWPrivateKey.derToPKCS1PEM(privateKey)
+let publicKeyPEM = SwPublicKey.derToPKCS8PEM(publicKey)
 ```
 ### Encrypt/decrypt data with RSA/AES
 ```
-try CCRSA.encrypt(data, pemKey: publicKey, padding: .OAEP, digest: .SHA1)
-try CCRSA.decrypt(data, pemKey: privateKey, padding: .OAEP, digest: .SHA1)
-try CC.AESEncrypt(data, key: aesKey, iv: iv, blockMode: .CBC)
-try CC.AESDecrypt(data, key: aesKey, iv: iv, blockMode: .CBC)
+try CCRSA.encrypt(data, derKey: publicKey, padding: .OAEP, digest: .SHA1)
+try CCRSA.decrypt(data, derKey: privateKey, padding: .OAEP, digest: .SHA1)
+try CC.crypt(.encrypt, blockMode: .CBC, algorithm: .RSA, padding: .PKCS7Padding, data: data, key: aesKey, iv: iv)
+try CC.crypt(.decrypt, blockMode: .CBC, algorithm: .RSA, padding: .PKCS7Padding, data: data, key: aesKey, iv: iv)
 ```
 ### HMAC and HASH functions
 ```
@@ -36,7 +38,7 @@ try SwEncryptedPrivateKey.decryptPEM(privEncrypted, passphrase: "longpassword")
 ### Encrypt/decrypt message in SEM (Simple Encrypted Message) format
 (works with OpenSSL PEM formatted keys too)
 ```
-//public enum AesMode : UInt8 {case AES128, AES192, AES256}
+//public enum AESMode : UInt8 {case AES128, AES192, AES256}
 //public enum BlockMode : UInt8 {case CBC, GCM}
 //public enum HMACMode : UInt8 {case None, SHA256, SHA512}
 
@@ -92,6 +94,7 @@ mkdir -p "$modulesDirectory"
 cat > "$modulesMapTemp" << MAP
 module CommonCrypto [system] {
     header "$SDKROOT/usr/include/CommonCrypto/CommonCrypto.h"
+    header "$SDKROOT/usr/include/CommonCrypto/CommonRandom.h"
     export *
 }
 module CommonRSACryptor [system] {
