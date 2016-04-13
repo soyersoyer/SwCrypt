@@ -236,29 +236,33 @@ public class SwEncryptedPrivateKey {
 	
 	static private func getAES128Key(passphrase: String, iv: NSData) -> NSData {
 		//128bit_Key = MD5(Passphrase + Salt)
-		let pass = NSData(data: passphrase.dataUsingEncoding(NSUTF8StringEncoding)!)
+		let pass = passphrase.dataUsingEncoding(NSUTF8StringEncoding)!
 		let salt = iv.subdataWithRange(NSRange(location: 0, length: 8))
 		
-		let key = NSMutableData(data: pass)
+		let key = NSMutableData()
+		key.appendData(pass)
 		key.appendData(salt)
 		return CC.md5(key)
 	}
 	
-	static private func getAES256Key(passphrase: String, iv:NSData) -> NSData {
+	static private func getAES256Key(passphrase: String, iv: NSData) -> NSData {
 		//128bit_Key = MD5(Passphrase + Salt)
 		//256bit_Key = 128bit_Key + MD5(128bit_Key + Passphrase + Salt)
-		let pass = NSMutableData(data: passphrase.dataUsingEncoding(NSUTF8StringEncoding)!)
+		let pass = passphrase.dataUsingEncoding(NSUTF8StringEncoding)!
 		let salt = iv.subdataWithRange(NSRange(location: 0, length: 8))
 		
-		let first = NSMutableData(data: pass)
+		let first = NSMutableData()
+		first.appendData(pass)
 		first.appendData(salt)
 		let aes128Key = CC.md5(first)
 		
-		let sec = NSMutableData(data: aes128Key)
+		let sec = NSMutableData()
+		sec.appendData(aes128Key)
 		sec.appendData(pass)
 		sec.appendData(salt)
 		
-		let aes256Key = NSMutableData(data: aes128Key)
+		let aes256Key = NSMutableData()
+		aes256Key.appendData(aes128Key)
 		aes256Key.appendData(CC.md5(sec))
 		return aes256Key
 	}
