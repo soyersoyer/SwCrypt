@@ -624,22 +624,8 @@ public class CCRSA {
 		defer {	CCRSACryptorRelease(privateKey) }
 		defer { CCRSACryptorRelease(publicKey) }
 		
-		var privKeyDataLength = 8192
-		let privKeyData = NSMutableData(length: privKeyDataLength)!
-		var pubKeyDataLength = 8192
-		let pubKeyData = NSMutableData(length: pubKeyDataLength)!
-		
-		status = CCRSACryptorExport(privateKey, privKeyData.mutableBytes, &privKeyDataLength)
-		guard status == noErr else {
-			throw error("CCRSACryptorExport privateKey failed \(status)")
-		}
-		status = CCRSACryptorExport(publicKey, pubKeyData.mutableBytes, &pubKeyDataLength)
-		guard status == noErr else {
-			throw error("CCRSACryptorExport publicKey failed \(status)")
-		}
-		
-		privKeyData.length = privKeyDataLength
-		pubKeyData.length = pubKeyDataLength
+		let privKeyData = try getKeyDataFromRSAKey(privateKey)
+		let pubKeyData = try getKeyDataFromRSAKey(publicKey)
 		
 		let privPEM = SwPrivateKey.getPEMFromKeyData(privKeyData)
 		let pubPEM = SwPublicKey.getPEMFromKeyData(pubKeyData)
@@ -687,6 +673,18 @@ public class CCRSA {
 		}
 		return key
 	}
+	
+	static private func getKeyDataFromRSAKey(key: CCRSACryptorRef) throws -> NSData {
+		var keyDataLength = 8192
+		let keyData = NSMutableData(length: keyDataLength)!
+		let status = CCRSACryptorExport(key, keyData.mutableBytes, &keyDataLength)
+		guard status == noErr else {
+			throw error("CCRSACryptorExport failed \(status)")
+		}
+		keyData.length = keyDataLength
+		return keyData
+	}
+	
 }
 
 public class CC {
