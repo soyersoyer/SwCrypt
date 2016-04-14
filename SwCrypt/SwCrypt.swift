@@ -137,8 +137,8 @@ private class PKCS8 {
 	private class PrivateKey {
 		
 		//https://lapo.it/asn1js/
-		static private func stripHeaderIfAny(keyData: NSData) throws -> NSData {
-			var bytes = keyData.arrayOfBytes()
+		static private func stripHeaderIfAny(derKey: NSData) throws -> NSData {
+			var bytes = derKey.arrayOfBytes()
 			
 			var offset = 0
 			guard bytes[offset] == 0x30 else {
@@ -158,7 +158,7 @@ private class PKCS8 {
 			
 			//without PKCS8 header
 			if bytes[offset] == 0x02 {
-				return keyData
+				return derKey
 			}
 			
 			let OID: [UInt8] = [0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
@@ -184,16 +184,16 @@ private class PKCS8 {
 				throw SwError.ASN1Parse
 			}
 			
-			return keyData.subdataWithRange(NSRange(location: offset, length: keyData.length - offset))
+			return derKey.subdataWithRange(NSRange(location: offset, length: derKey.length - offset))
 		}
 	}
 	
 	class PublicKey {
 		
-		static private func addHeader(keyData: NSData) -> NSData {
+		static private func addHeader(derKey: NSData) -> NSData {
 			let result = NSMutableData()
 			
-			let encodingLength: Int = encodedOctets(keyData.length + 1).count
+			let encodingLength: Int = encodedOctets(derKey.length + 1).count
 			let OID: [UInt8] = [0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
 			                    0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00]
 			
@@ -203,7 +203,7 @@ private class PKCS8 {
 			builder.append(0x30)
 			
 			// Overall size, made of OID + bitstring encoding + actual key
-			let size = OID.count + 2 + encodingLength + keyData.length
+			let size = OID.count + 2 + encodingLength + derKey.length
 			let encodedSize = encodedOctets(size)
 			builder.appendContentsOf(encodedSize)
 			result.appendBytes(builder, length: builder.count)
@@ -211,19 +211,19 @@ private class PKCS8 {
 			builder.removeAll(keepCapacity: false)
 			
 			builder.append(0x03)
-			builder.appendContentsOf(encodedOctets(keyData.length + 1))
+			builder.appendContentsOf(encodedOctets(derKey.length + 1))
 			builder.append(0x00)
 			result.appendBytes(builder, length: builder.count)
 			
 			// Actual key bytes
-			result.appendData(keyData)
+			result.appendData(derKey)
 			
 			return result as NSData
 		}
 		
 		//https://lapo.it/asn1js/
-		static private func stripHeaderIfAny(keyData: NSData) throws -> NSData {
-			var bytes = keyData.arrayOfBytes()
+		static private func stripHeaderIfAny(derKey: NSData) throws -> NSData {
+			var bytes = derKey.arrayOfBytes()
 			
 			var offset = 0
 			guard bytes[offset] == 0x30 else {
@@ -239,7 +239,7 @@ private class PKCS8 {
 			
 			//without PKCS8 header
 			if bytes[offset] == 0x02 {
-				return keyData
+				return derKey
 			}
 			
 			let OID: [UInt8] = [0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
@@ -270,7 +270,7 @@ private class PKCS8 {
 			}
 			
 			offset += 1
-			return keyData.subdataWithRange(NSRange(location: offset, length: keyData.length - offset))
+			return derKey.subdataWithRange(NSRange(location: offset, length: derKey.length - offset))
 		}
 		
 		static private func encodedOctets(int: Int) -> [UInt8] {
