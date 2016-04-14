@@ -1,18 +1,21 @@
 SwCrypt
 =========
 
-### Create public and private keys in DER format, convert to PEM
+### Create public and private keys in DER format, convert to PEM, encrypt/decrypt it (OpenSSL compatible)
 ```
 let (privateKey, publicKey) = try! CCRSA.generateKeyPair(2048)
 let privateKeyPEM = try SWPrivateKey.derToPKCS1PEM(privateKey)
 let publicKeyPEM = SwPublicKey.derToPKCS8PEM(publicKey)
+
+try SwEncryptedPrivateKey.encryptPEM(privateKeyPEM, passphrase: "longpassword", mode: .AES256CBC)
+try SwEncryptedPrivateKey.decryptPEM(privEncrypted, passphrase: "longpassword")
 ```
 ### Encrypt/decrypt data with RSA or symmetric ciphers
 ```
 try CCRSA.encrypt(data, derKey: publicKey, padding: .OAEP, digest: .SHA1)
 try CCRSA.decrypt(data, derKey: privateKey, padding: .OAEP, digest: .SHA1)
 try CC.crypt(.encrypt, blockMode: .CBC, algorithm: .AES, padding: .PKCS7Padding, data: data, key: aesKey, iv: iv)
-try CC.crypt(.decrypt, blockMode: .CBC, algorithm: .AES, padding: .PKCS7Padding, data: data, key: aesKey, iv: iv)
+try CC.crypt(.decrypt, blockMode: .GCM, algorithm: .AES, padding: .PKCS7Padding, data: data, key: aesKey, iv: iv)
 ```
 ### HMAC and HASH functions
 ```
@@ -26,13 +29,6 @@ CC.HMAC(data, alg: .SHA512, key: key)
 try SwKeyStore.upsertKey(privateKeyPEM, keyTag: "priv", options: [kSecAttrAccessible:kSecAttrAccessibleWhenUnlockedThisDeviceOnly])
 try SwKeyStore.getKey("priv")
 try SwKeyStore.delKey("priv")
-```
-### Encrypt/decrypt private key (OpenSSL compatible)
-```
-//public enum Mode {case AES128CBC, AES256CBC}
-
-try SwEncryptedPrivateKey.encryptPEM(priv, passphrase: "longpassword", mode: .AES256CBC)
-try SwEncryptedPrivateKey.decryptPEM(privEncrypted, passphrase: "longpassword")
 ```
 
 ### Encrypt/decrypt message in SEM (Simple Encrypted Message) format
@@ -81,7 +77,7 @@ When decrypting using a private key:
 
 Install
 -------
-Just copy `SwCrypt.swift` and `CommonRSACryptor.h` to your project.
+Just copy `SwCrypt.swift`, `CommonRSACryptor.h`, `CommonGCMCryptor.h` to your project.
 SwCrypt uses `CommonCrypto`, so please create a new build phase for the following script, and put it before the compilation.
 
 ```bash
@@ -101,13 +97,17 @@ module CommonRSACryptor [system] {
     header "$SRCROOT/CommonRSACryptor.h"
     export *
 }
+module CommonGCMCryptor [system] {
+    header "$SRCROOT/CommonGCMCryptor.h"
+    export *
+}
 MAP
 
 diff "$modulesMapTemp" "$modulesMap" >/dev/null 2>/dev/null
 if [[ $? != 0 ]] ; then
-    mv "$modulesMapTemp" "$modulesMap"
+mv "$modulesMapTemp" "$modulesMap"
 else
-    rm "$modulesMapTemp"
+rm "$modulesMapTemp"
 fi
 ```
 
