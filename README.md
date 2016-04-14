@@ -52,7 +52,7 @@ SEM (Simple Encrypted Message) format
 
 When encrypting using a public key:
 
-- Convert clear text to NSData using UTF8
+- Convert message to NSData using UTF8 encoding
 - Create message header :
   - AES mode 1 byte
   - Cipher mode 1 byte
@@ -68,12 +68,12 @@ When encrypting using a public key:
 
 When decrypting using a private key:
 
-- Convert encrypted text to NSData from base64 string
+- Base64 decode
 - Decrypt the first block (RSA key size)
 - Read the message header (AES mode, Cipher mode, HMAC mode), AES key, IV
 - Check the HMAC
 - Decrypt message
-- Convert NSData to UTF8 strint
+- Convert NSData to string with UTF8 decoding
 
 Install
 -------
