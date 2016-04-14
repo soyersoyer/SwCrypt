@@ -1,6 +1,7 @@
 import Foundation
 import CommonCrypto
 import CommonRSACryptor
+import CommonGCMCryptor
 
 
 enum SwError : ErrorType {
@@ -751,6 +752,10 @@ public class CC {
 	static public func crypt(opMode: OpMode, blockMode: BlockMode,
 	                            algorithm: Algorithm, padding: Padding,
 	                            data: NSData, key: NSData, iv: NSData) throws -> NSData {
+		if blockMode == .GCM {
+			let (result,tag) = try cryptGCM(opMode, algorithm: algorithm, data: data, key: key, iv: iv)
+			return result
+		}
 		var cryptor : CCCryptorRef = nil
 		try CCError.check(CCCryptorCreateWithMode(
 			opMode.rawValue, blockMode.rawValue,
@@ -770,6 +775,16 @@ public class CC {
 		
 		result.length = updateLen + finalLen
 		return result
+	}
+	
+	static public func cryptGCM(opMode: OpMode, algorithm: Algorithm, data: NSData,
+	                             key: NSData, iv: NSData) throws -> (NSData, NSData) {
+		let result = NSMutableData(length: data.length)!
+		var tagLength = 16
+		let tag = NSMutableData(length: tagLength)!
+		try CCError.check(CCCryptorGCM(opMode.rawValue, algorithm.rawValue, key.bytes, key.length, iv.bytes, iv.length, nil, 0, data.bytes, data.length, result.mutableBytes , tag.bytes, &tagLength))
+		tag.length = tagLength
+		return (result, tag)
 	}
 	
 }
