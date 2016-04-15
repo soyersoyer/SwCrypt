@@ -7,7 +7,8 @@ enum SwError : ErrorType {
 	case ASN1Parse
 	case PEMParse
 	case SEMParse
-	case MessageAuthentication
+	case SEMUnsupportedVersion
+	case SEMMessageAuthentication
 }
 
 enum SecError : OSStatus, ErrorType {
@@ -538,6 +539,7 @@ public class SEM {
 	}
 	
 	public struct Mode {
+		let version : UInt8 = 0
 		let aes: AESMode
 		let block: BlockMode
 		let hmac: HMACMode
@@ -606,40 +608,44 @@ public class SEM {
 			let hmaccedData = data.subdataWithRange(NSRange(location: 0, length: data.length - mode.digestLength))
 			let hmac = data.subdataWithRange(NSRange(location: data.length - mode.digestLength, length: mode.digestLength))
 			guard CC.HMAC(hmaccedData, alg: mode.cc!, key: aesKey) == hmac else {
-				throw SwError.MessageAuthentication
+				throw SwError.SEMMessageAuthentication
 			}
 		}
 	}
 	
 	static private func getMessageHeader(mode: Mode, aesKey: NSData, iv: NSData) -> NSData {
-		let header : [UInt8] = [mode.aes.rawValue, mode.block.rawValue, mode.hmac.rawValue]
-		let message = NSMutableData(bytes: header, length: 3)
+		let header : [UInt8] = [mode.version, mode.aes.rawValue, mode.block.rawValue, mode.hmac.rawValue]
+		let message = NSMutableData(bytes: header, length: 4)
 		message.appendData(aesKey)
 		message.appendData(iv)
 		return message
 	}
 	
 	static private func parseMessageHeader(header: NSData) throws -> (Mode, NSData, NSData) {
-		guard header.length > 3 else {
+		guard header.length > 4 else {
 			throw SwError.SEMParse
 		}
 		let bytes = header.arrayOfBytes()
-		guard let aes = AESMode(rawValue: bytes[0]) else {
+		let version = bytes[0]
+		guard version == 0 else {
+			throw SwError.SEMUnsupportedVersion
+		}
+		guard let aes = AESMode(rawValue: bytes[1]) else {
 			throw SwError.SEMParse
 		}
-		guard let block = BlockMode(rawValue: bytes[1]) else {
+		guard let block = BlockMode(rawValue: bytes[2]) else {
 			throw SwError.SEMParse
 		}
-		guard let hmac = HMACMode(rawValue: bytes[2]) else {
+		guard let hmac = HMACMode(rawValue: bytes[3]) else {
 			throw SwError.SEMParse
 		}
 		let keySize = aes.keySize
 		let ivSize = block.ivSize
-		guard header.length == 3 + keySize + ivSize else {
+		guard header.length == 4 + keySize + ivSize else {
 			throw SwError.SEMParse
 		}
-		let key = header.subdataWithRange(NSRange(location: 3, length: keySize))
-		let iv = header.subdataWithRange(NSRange(location: 3 + keySize, length: ivSize))
+		let key = header.subdataWithRange(NSRange(location: 4, length: keySize))
+		let iv = header.subdataWithRange(NSRange(location: 4 + keySize, length: ivSize))
 		
 		return (Mode(aes: aes, block: block, hmac: hmac), key, iv)
 	}	

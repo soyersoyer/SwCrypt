@@ -54,6 +54,7 @@ When encrypting using a public key:
 
 - Convert message to NSData using UTF8 encoding
 - Create message header :
+  - Version indicator 1 byte (current: 0)
   - AES mode 1 byte
   - Cipher mode 1 byte
   - HMAC mode 1 byte
@@ -70,7 +71,7 @@ When decrypting using a private key:
 
 - Base64 decode
 - Decrypt the first block (RSA key size)
-- Read the message header (AES mode, Cipher mode, HMAC mode), AES key, IV
+- Read the message header (Version, AES mode, Cipher mode, HMAC mode), AES key, IV
 - Check the HMAC
 - Decrypt message
 - Convert NSData to string with UTF8 decoding
