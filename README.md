@@ -3,7 +3,7 @@ SwCrypt
 
 ### Create public and private keys in DER format, convert to PEM, encrypt/decrypt it (OpenSSL compatible)
 ```
-let (privateKey, publicKey) = try! CCRSA.generateKeyPair(2048)
+let (privateKey, publicKey) = try! CC.RSA.generateKeyPair(2048)
 let privateKeyPEM = try SWPrivateKey.derToPKCS1PEM(privateKey)
 let publicKeyPEM = SwPublicKey.derToPKCS8PEM(publicKey)
 
@@ -12,8 +12,8 @@ try SwEncryptedPrivateKey.decryptPEM(privEncrypted, passphrase: "longpassword")
 ```
 ### Encrypt/decrypt data with RSA or symmetric ciphers
 ```
-try CCRSA.encrypt(data, derKey: publicKey, padding: .OAEP, digest: .SHA1)
-try CCRSA.decrypt(data, derKey: privateKey, padding: .OAEP, digest: .SHA1)
+try CC.RSA.encrypt(data, derKey: publicKey, padding: .OAEP, digest: .SHA1)
+try CC.RSA.decrypt(data, derKey: privateKey, padding: .OAEP, digest: .SHA1)
 try CC.crypt(.encrypt, blockMode: .CBC, algorithm: .AES, padding: .PKCS7Padding, data: data, key: aesKey, iv: iv)
 try CC.crypt(.decrypt, blockMode: .GCM, algorithm: .AES, padding: .PKCS7Padding, data: data, key: aesKey, iv: iv)
 ```
