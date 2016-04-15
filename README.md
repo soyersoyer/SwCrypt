@@ -75,9 +75,18 @@ When decrypting using a private key:
 - Decrypt message
 - Convert NSData to string with UTF8 decoding
 
+RSA and GCM functions
+---------------------
+
+SwCrypt uses dlopen and dlsym to load the CommonCrypto's RSA and GCM functions, because they are not available in public header files. You can check the availability before using them. If they are not available the related functions above raise an CCError.NotAvailable.
+```
+let rsaAvailable : Bool = CCRSA.available()
+let gcmAvailable : Bool = CCGCM.available()
+```
+
 Install
 -------
-Just copy `SwCrypt.swift`, `CommonRSACryptor.h`, `CommonGCMCryptor.h` to your project.
+Just copy `SwCrypt.swift` to your project.
 SwCrypt uses `CommonCrypto`, so please create a new build phase for the following script, and put it before the compilation.
 
 ```bash
@@ -91,14 +100,6 @@ cat > "$modulesMapTemp" << MAP
 module CommonCrypto [system] {
     header "$SDKROOT/usr/include/CommonCrypto/CommonCrypto.h"
     header "$SDKROOT/usr/include/CommonCrypto/CommonRandom.h"
-    export *
-}
-module CommonRSACryptor [system] {
-    header "$SRCROOT/CommonRSACryptor.h"
-    export *
-}
-module CommonGCMCryptor [system] {
-    header "$SRCROOT/CommonGCMCryptor.h"
     export *
 }
 MAP

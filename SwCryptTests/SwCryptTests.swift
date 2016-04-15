@@ -21,6 +21,14 @@ class SwCryptTest: XCTestCase {
 		return (privKey, pubKey)
 	}
 	
+	func testRSAAvailable() {
+		XCTAssert(CCRSA.available())
+	}
+	
+	func testGCMAvailable() {
+		XCTAssert(CCGCM.available())
+	}
+	
     func testCreateKeyPair() {
 		XCTAssert(keyPair != nil)
 	}
