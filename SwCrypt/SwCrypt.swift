@@ -1008,7 +1008,7 @@ extension NSData {
 	///
 	/// - returns: String representation of this NSData object.
 	
-	func hexadecimalString() -> String {
+	public func hexadecimalString() -> String {
 		var hexstr = String()
 		for i in UnsafeBufferPointer<UInt8>(start: UnsafeMutablePointer<UInt8>(bytes), count: length) {
 			hexstr += String(format: "%02X", i)
@@ -1035,7 +1035,7 @@ extension String {
 	///
 	/// - returns: NSData represented by this hexadecimal string. Returns nil if string contains characters outside the 0-9 and a-f range.
 	
-	func dataFromHexadecimalString() -> NSData? {
+	public func dataFromHexadecimalString() -> NSData? {
 		let trimmedString = self.stringByTrimmingCharactersInSet(NSCharacterSet(charactersInString: "<> ")).stringByReplacingOccurrencesOfString(" ", withString: "")
 		
 		// make sure the cleaned up string consists solely of hex digits, and that we have even number of them
