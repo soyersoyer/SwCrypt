@@ -671,10 +671,7 @@ public enum CCError : CCCryptorStatus, ErrorType {
 		}
 	}
 	static func check(status: CCCryptorStatus?) throws {
-		guard let status = status else {
-			throw NotAvailable
-		}
-		try check(status)
+		try check(status ?? NotAvailable.rawValue)
 	}
 }
 
