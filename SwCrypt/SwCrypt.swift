@@ -10,28 +10,28 @@ enum SwError : ErrorType {
 	case SEMMessageAuthentication
 }
 
-enum SecError : OSStatus, ErrorType {
-	case Unimplemented = -4
-	case Param = -50
-	case Allocate = -108
-	case NotAvailable = -25291
-	case AuthFailed = -25293
-	case DuplicateItem = -25299
-	case ItemNotFound = -25300
-	case InteractionNotAllowed = -25308
-	case Decode = -26275
-	case Unknown = -2147483648
-	init(status: OSStatus) {
-		self = SecError(rawValue: status) ?? .Unknown
-	}
-	static func check(status: OSStatus) throws {
-		guard status == errSecSuccess else {
-			throw SecError(status: status)
+public class SwKeyStore {
+
+	enum SecError : OSStatus, ErrorType {
+		case Unimplemented = -4
+		case Param = -50
+		case Allocate = -108
+		case NotAvailable = -25291
+		case AuthFailed = -25293
+		case DuplicateItem = -25299
+		case ItemNotFound = -25300
+		case InteractionNotAllowed = -25308
+		case Decode = -26275
+		case Unknown = -2147483648
+		init(status: OSStatus) {
+			self = SecError(rawValue: status) ?? .Unknown
+		}
+		static func check(status: OSStatus) throws {
+			guard status == errSecSuccess else {
+				throw SecError(status: status)
+			}
 		}
 	}
-}
-
-public class SwKeyStore {
 	
 	static public func upsertKey(pemKey: String, keyTag: String,
 	                             options: [NSString : AnyObject] = [:]) throws {
