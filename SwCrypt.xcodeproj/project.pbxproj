@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A042DCBA1CC0800F00271902 /* README.md in Sources */ = {isa = PBXBuildFile; fileRef = A042DCB91CC0800F00271902 /* README.md */; };
 		A0A71E7C1CBC7D74002C5C88 /* SwCrypt.h in Headers */ = {isa = PBXBuildFile; fileRef = A0A71E7B1CBC7D74002C5C88 /* SwCrypt.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		A0A71E831CBC7D74002C5C88 /* SwCrypt.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A0A71E781CBC7D74002C5C88 /* SwCrypt.framework */; };
 		A0A71E881CBC7D74002C5C88 /* SwCryptTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0A71E871CBC7D74002C5C88 /* SwCryptTests.swift */; };
@@ -110,7 +109,6 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = A0A71E8C1CBC7D74002C5C88 /* Build configuration list for PBXNativeTarget "SwCrypt" */;
 			buildPhases = (
-				A0A71E941CBC7DE0002C5C88 /* Run Script */,
 				A0A71E731CBC7D74002C5C88 /* Sources */,
 				A0A71E741CBC7D74002C5C88 /* Frameworks */,
 				A0A71E751CBC7D74002C5C88 /* Headers */,
@@ -129,7 +127,6 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = A0A71E8F1CBC7D74002C5C88 /* Build configuration list for PBXNativeTarget "SwCryptTests" */;
 			buildPhases = (
-				A0A71E951CBC7DED002C5C88 /* ShellScript */,
 				A0A71E7E1CBC7D74002C5C88 /* Sources */,
 				A0A71E7F1CBC7D74002C5C88 /* Frameworks */,
 				A0A71E801CBC7D74002C5C88 /* Resources */,
@@ -197,42 +194,11 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
-/* Begin PBXShellScriptBuildPhase section */
-		A0A71E941CBC7DE0002C5C88 /* Run Script */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-			);
-			name = "Run Script";
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "modulesDirectory=$DERIVED_FILES_DIR/modules\nmodulesMap=$modulesDirectory/module.modulemap\nmodulesMapTemp=$modulesDirectory/module.modulemap.tmp\n\nmkdir -p \"$modulesDirectory\"\n\ncat > \"$modulesMapTemp\" << MAP\nmodule CommonCrypto [system] {\n    header \"$SDKROOT/usr/include/CommonCrypto/CommonCrypto.h\"\n    header \"$SDKROOT/usr/include/CommonCrypto/CommonRandom.h\"\n    export *\n}\nMAP\n\ndiff \"$modulesMapTemp\" \"$modulesMap\" >/dev/null 2>/dev/null\nif [[ $? != 0 ]] ; then\nmv \"$modulesMapTemp\" \"$modulesMap\"\nelse\nrm \"$modulesMapTemp\"\nfi";
-		};
-		A0A71E951CBC7DED002C5C88 /* ShellScript */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "modulesDirectory=$DERIVED_FILES_DIR/modules\nmodulesMap=$modulesDirectory/module.modulemap\nmodulesMapTemp=$modulesDirectory/module.modulemap.tmp\n\nmkdir -p \"$modulesDirectory\"\n\ncat > \"$modulesMapTemp\" << MAP\nmodule CommonCrypto [system] {\n    header \"$SDKROOT/usr/include/CommonCrypto/CommonCrypto.h\"\n    header \"$SDKROOT/usr/include/CommonCrypto/CommonRandom.h\"\n    export *\n}\nMAP\n\ndiff \"$modulesMapTemp\" \"$modulesMap\" >/dev/null 2>/dev/null\nif [[ $? != 0 ]] ; then\nmv \"$modulesMapTemp\" \"$modulesMap\"\nelse\nrm \"$modulesMapTemp\"\nfi";
-		};
-/* End PBXShellScriptBuildPhase section */
-
 /* Begin PBXSourcesBuildPhase section */
 		A0A71E731CBC7D74002C5C88 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A042DCBA1CC0800F00271902 /* README.md in Sources */,
 				A0A71E931CBC7DB4002C5C88 /* SwCrypt.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

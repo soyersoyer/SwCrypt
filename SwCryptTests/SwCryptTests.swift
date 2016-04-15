@@ -15,18 +15,41 @@ class SwCryptTest: XCTestCase {
     }
 
 	static func createKeyPair(size: Int) throws -> (String, String) {
-		let keyPair = try CCRSA.generateKeyPair(size)
+		let keyPair = try CC.RSA.generateKeyPair(size)
 		let privKey = SwPrivateKey.derToPKCS1PEM(keyPair.0)
 		let pubKey = SwPublicKey.derToPKCS1PEM(keyPair.1)
 		return (privKey, pubKey)
 	}
 	
-	func testRSAAvailable() {
-		XCTAssert(CCRSA.available())
+	func testAvailable() {
+		XCTAssert(CC.digestAvailable())
+		XCTAssert(CC.randomAvailable())
+		XCTAssert(CC.hmacAvailable())
+		XCTAssert(CC.cryptorAvailable())
+		XCTAssert(CC.RSA.available())
+		XCTAssert(CC.GCM.available())
+		XCTAssert(CC.available())
 	}
 	
-	func testGCMAvailable() {
-		XCTAssert(CCGCM.available())
+	func testDigest() {
+		XCTAssert(CC.digestAvailable())
+		let testData = "rokafogtacsuka".dataUsingEncoding(NSUTF8StringEncoding)!
+		let sha1 = "9e421ffa8b2c83ac23e96bc9f9302f4a16311037".dataFromHexadecimalString()!
+		let sha256 = "ae6ab1cf65971f88b9cd92c2f334d6a99beaf5b40240d4b440fdb4a1231db0f0".dataFromHexadecimalString()!
+		let sha384 = "acf011a346e96364091bd21415a2437273c7f3c84060b21ac19f2eafa1c6cde76467b0b0aba99626b18aa3da83e442db".dataFromHexadecimalString()!
+		let sha512 = "016748fad47ddfba4fcd19aacc67ee031dfef40f5e9692c84f8846e520f2a827a4ea5035af8a66686c60796a362c30e6c473cfdbb9d86f43312001fc0b660734".dataFromHexadecimalString()!
+		let sha224 = "ec92519bb9e82a79097b0dd0618927b3262a70d6f02bd667c413009e".dataFromHexadecimalString()!
+		let md5 = "9b43f853613732cfc8531ed6bcbf6d68".dataFromHexadecimalString()!
+		XCTAssert(CC.sha1(testData) == sha1)
+		XCTAssert(CC.sha256(testData) == sha256)
+		XCTAssert(CC.sha384(testData) == sha384)
+		XCTAssert(CC.sha512(testData) == sha512)
+		XCTAssert(CC.sha224(testData) == sha224)
+		XCTAssert(CC.md5(testData) == md5)
+	}
+	
+	func testHmac() {
+		
 	}
 	
     func testCreateKeyPair() {

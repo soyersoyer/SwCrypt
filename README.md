@@ -76,42 +76,28 @@ When decrypting using a private key:
 - Decrypt message
 - Convert NSData to string with UTF8 decoding
 
-RSA and GCM functions
+-----
+
+Check availability
 ---------------------
 
-SwCrypt uses dlopen and dlsym to load the CommonCrypto's RSA and GCM functions, because they are not available in public header files. You can check the availability before using them. If they are not available the related functions above raise an CCError.NotAvailable.
+SwCrypt uses dlopen and dlsym to load the CommonCrypto's functions, because not all of them are available in public header files. You have to check the availability before using them.
+
 ```
-let rsaAvailable : Bool = CCRSA.available()
-let gcmAvailable : Bool = CCGCM.available()
+let digestAvailable : Bool = CC.digestAvailable()
+let ramdomAvailable : Bool = CC.randomAvailable(()
+let hmacAvailable : Bool = CC.hmacAvailable()
+let cryptorAvailable : Bool = CC.cryptorAvailable
+let rsaAvailable : Bool = CC.RSA.available()
+let gcmAvailable : Bool = CC.GCM.available()
+
+or all in one turn:
+let ccAvailable : Bool = CC.available()
 ```
 
 Install
 -------
 Just copy `SwCrypt.swift` to your project.
-SwCrypt uses `CommonCrypto`, so please create a new build phase for the following script, and put it before the compilation.
-
-```bash
-modulesDirectory=$DERIVED_FILES_DIR/modules
-modulesMap=$modulesDirectory/module.modulemap
-modulesMapTemp=$modulesDirectory/module.modulemap.tmp
-
-mkdir -p "$modulesDirectory"
-
-cat > "$modulesMapTemp" << MAP
-module CommonCrypto [system] {
-    header "$SDKROOT/usr/include/CommonCrypto/CommonCrypto.h"
-    header "$SDKROOT/usr/include/CommonCrypto/CommonRandom.h"
-    export *
-}
-MAP
-
-diff "$modulesMapTemp" "$modulesMap" >/dev/null 2>/dev/null
-if [[ $? != 0 ]] ; then
-mv "$modulesMapTemp" "$modulesMap"
-else
-rm "$modulesMapTemp"
-fi
-```
 
 Inspired from
 -------------
