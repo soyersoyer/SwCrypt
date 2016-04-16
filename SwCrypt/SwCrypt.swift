@@ -44,7 +44,9 @@ public class SwKeyStore {
 			kSecAttrApplicationTag: keyTag,
 			kSecValueData: pemKeyAsData
 		]
-		options.forEach({k, v in parameters[k] = v})
+		options.forEach { k, v in
+			parameters[k] = v
+		}
 		
 		var status = SecItemAdd(parameters, nil)
 		if status == errSecDuplicateItem {
