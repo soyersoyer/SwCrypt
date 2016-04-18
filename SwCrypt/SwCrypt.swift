@@ -1147,7 +1147,9 @@ public class CC {
 				CCRSACryptorEncrypt != nil &&
 				CCRSACryptorDecrypt != nil &&
 				CCRSACryptorExport != nil &&
-				CCRSACryptorImport != nil
+				CCRSACryptorImport != nil &&
+				CCRSACryptorSign != nil &&
+				CCRSACryptorVerify != nil
 		}
 		
 		typealias CCRSACryptorRef = UnsafePointer<Void>
