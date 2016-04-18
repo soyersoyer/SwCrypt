@@ -48,10 +48,6 @@ class SwCryptTest: XCTestCase {
 		XCTAssert(CC.md5(testData) == md5)
 	}
 	
-	func testHmac() {
-		
-	}
-	
     func testCreateKeyPair() {
 		XCTAssert(keyPair != nil)
 	}
@@ -142,4 +138,15 @@ class SwCryptTest: XCTestCase {
 		let pub = bundle.objectForInfoDictionaryKey("testPubPEM") as! String
 		encryptDecrypt(priv, pubKey: pub)
 	}
+	
+	func testSimpleSignVerify() {
+		let (priv, pub) = keyPair!
+		let testMessage = "rirararom_vagy_rararirom"
+		
+		let sign = try? SMSV.sign(testMessage, pemKey: priv)
+		XCTAssert(sign != nil)
+		let verified = try? SMSV.verify(testMessage, pemKey: pub, sign: sign!)
+		XCTAssert(verified == true)
+	}
+	
 }

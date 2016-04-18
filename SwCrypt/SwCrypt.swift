@@ -652,6 +652,38 @@ public class SEM {
 	}	
 }
 
+//Simple Message Sign and Verify
+public class SMSV {
+	
+	static public func sign(message: String, pemKey: String) throws -> String {
+		let data = message.dataUsingEncoding(NSUTF8StringEncoding)!
+		let signedData = try signData(data, pemKey: pemKey)
+		return signedData.base64EncodedStringWithOptions([])
+	}
+	
+	static public func signData(data: NSData, pemKey: String) throws -> NSData {
+		let derKey = try SwPrivateKey.pemToPKCS1DER(pemKey)
+		let hash = CC.sha512(data)
+		let signedData = try CC.RSA.sign(hash, derKey: derKey, padding: .OAEP, digest: .SHA512)
+		return signedData
+	}
+	
+	static public func verify(message: String, pemKey: String, sign: String) throws -> Bool {
+		let data = message.dataUsingEncoding(NSUTF8StringEncoding)!
+		guard let signData = NSData(base64EncodedString: sign, options: []) else {
+			throw SwError.Base64Decoding
+		}
+		return try verifyData(data, pemKey: pemKey, signData: signData)
+	}
+	
+	static public func verifyData(data: NSData, pemKey: String, signData: NSData) throws -> Bool {
+		let derKey = try SwPublicKey.pemToPKCS1DER(pemKey)
+		let hash = CC.sha512(data)
+		return try CC.RSA.verify(hash, derKey: derKey, padding: .OAEP, digest: .SHA512, signedData: signData)
+	}
+	
+}
+
 
 public class CC {
 
@@ -670,8 +702,13 @@ public class CC {
 		}
 		static func check(status: CCCryptorStatus) throws {
 			guard status == noErr else {
-				throw CCError(status: status)
+				try check(CCError(status: status))
+				return
 			}
+		}
+		static func check(status: CCError) throws {
+			print(status)
+			throw status
 		}
 	}
 	
@@ -992,6 +1029,8 @@ public class CC {
 				cipherTextLen: &bufferSize,
 				tagData: nil, tagDataLen: 0,
 				digestType: digest.rawValue))
+
+			buffer.length = bufferSize
 			
 			return buffer
 		}
@@ -1047,6 +1086,58 @@ public class CC {
 		
 		static private func getKeySize(key: CCRSACryptorRef) -> Int {
 			return Int(CCRSAGetKeySize!(key)/8)
+		}
+		
+		static public func sign(hash: NSData, derKey: NSData, padding: AsymmetricPadding,
+		                        digest: DigestAlgorithm) throws -> NSData {
+			let key = try importFromDERKey(derKey)
+			defer { CCRSACryptorRelease!(key) }
+			
+			let keySize = getKeySize(key)
+			var signedDataLength = keySize
+			let signedData = NSMutableData(length:signedDataLength)!
+			
+			//ccrsa_oaep_encode_parameter bug
+			if padding == .OAEP &&
+				hash.length > keySize - 2 * CCDigestGetOutputSize!(algorithm: digest.rawValue) - 2 {
+				assertionFailure("corecrypto: sign with OAEP is buggy in this configuration")
+			}
+			
+			if padding == .OAEP && hash.length != CCDigestGetOutputSize!(algorithm: digest.rawValue) {
+				assertionFailure("corecrypto: sign with OAEP is buggy in this configuration")
+			}
+			
+			try CCError.check(CCRSACryptorSign!(
+				privateKey: key,
+				padding: padding.rawValue,
+				hashToSign: hash.bytes, hashSignLen: hash.length,
+				digestType: digest.rawValue, saltLen: 0 /*unused*/,
+				signedData: signedData.mutableBytes, signedDataLen: &signedDataLength))
+			signedData.length = signedDataLength
+			return signedData
+		}
+		
+		static public func verify(hash: NSData, derKey: NSData, padding: AsymmetricPadding,
+		                          digest: DigestAlgorithm, signedData: NSData) throws -> Bool {
+			let key = try importFromDERKey(derKey)
+			defer { CCRSACryptorRelease!(key) }
+			
+			if padding == .OAEP && hash.length != CCDigestGetOutputSize!(algorithm: digest.rawValue) {
+				assertionFailure("corecrypto: verify with OAEP is buggy in this configuration")
+			}
+			
+			let status = CCRSACryptorVerify!(
+				publicKey: key,
+				padding: padding.rawValue,
+				hash: hash.bytes, hashLen: hash.length,
+				digestType: digest.rawValue, saltLen: 0 /*unused*/,
+				signedData: signedData.bytes, signedDataLen:signedData.length)
+			let kCCNotVerified : CCCryptorStatus = -4306
+			if status == kCCNotVerified {
+				return false
+			}
+			try CCError.check(status)
+			return true
 		}
 		
 		static public func available() -> Bool {
@@ -1109,6 +1200,34 @@ public class CC {
 			keyPackageLen: Int,
 			key: UnsafeMutablePointer<CCRSACryptorRef>) -> CCCryptorStatus
 		static let CCRSACryptorImport : CCRSACryptorImportT? = getFunc(dl, f: "CCRSACryptorImport")
+		
+		typealias CCRSACryptorSignT = @convention(c) (
+			privateKey: CCRSACryptorRef,
+			padding: CCAsymmetricPadding,
+			hashToSign: UnsafePointer<Void>,
+			hashSignLen: size_t,
+			digestType: CCDigestAlgorithm,
+			saltLen: size_t,
+			signedData: UnsafeMutablePointer<Void>,
+			signedDataLen: UnsafeMutablePointer<Int>) -> CCCryptorStatus
+		static let CCRSACryptorSign : CCRSACryptorSignT? = getFunc(dl, f: "CCRSACryptorSign")
+		
+		typealias CCRSACryptorVerifyT = @convention(c) (
+			publicKey: CCRSACryptorRef,
+			padding: CCAsymmetricPadding,
+			hash: UnsafePointer<Void>,
+			hashLen: size_t,
+			digestType: CCDigestAlgorithm,
+			saltLen: size_t,
+			signedData: UnsafePointer<Void>,
+			signedDataLen: size_t) -> CCCryptorStatus
+		static let CCRSACryptorVerify : CCRSACryptorVerifyT? = getFunc(dl, f: "CCRSACryptorVerify")
+	
+		typealias CCDigestGetOutputSizeT = @convention(c) (
+			algorithm: CCDigestAlgorithm) -> size_t
+		static let CCDigestGetOutputSize : CCDigestGetOutputSizeT? =
+			getFunc(dl, f: "CCDigestGetOutputSize")
+		
 	}
 	
 }
