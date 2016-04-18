@@ -1,12 +1,22 @@
 SwCrypt
 =========
 
-### Create public and private keys in DER format, convert to PEM, encrypt/decrypt it (OpenSSL compatible)
+### Create public and private keys in DER format
 ```
 let (privateKey, publicKey) = try! CC.RSA.generateKeyPair(2048)
+```
+### Convert them to PEM format
+```
 let privateKeyPEM = try SWPrivateKey.derToPKCS1PEM(privateKey)
 let publicKeyPEM = SwPublicKey.derToPKCS8PEM(publicKey)
-
+```
+### Or read them from strings with PEM data
+```
+let privateKeyDER = SwPrivateKey.pemToPKCS1DER(privateKeyPEM)
+let publicKeyDER = SwPulbicKey.pemToPKCS1DER(publicKeyPEM)
+```
+### Or encrypt, decrypt the private key (OpenSSL compatible)
+```
 try SwEncryptedPrivateKey.encryptPEM(privateKeyPEM, passphrase: "longpassword", mode: .AES256CBC)
 try SwEncryptedPrivateKey.decryptPEM(privEncrypted, passphrase: "longpassword")
 ```
@@ -45,6 +55,12 @@ try SEM.encryptData(testData, pemKey: publicKey, mode: mode)
 try SEM.decryptData(encData, pemKey: privateKey)
 ```
 
+### Sign, verify messages with SMSV (Simple Message Sign and Verify)
+```
+let sign = try? SMSV.sign(testMessage, pemKey: priv)
+let verified = try? SMSV.verify(testMessage, pemKey: pub, sign: sign!)
+```
+
 -----
 
 SEM (Simple Encrypted Message) format
@@ -75,6 +91,23 @@ When decrypting using a private key:
 - Check the HMAC
 - Decrypt message
 - Convert NSData to string with UTF8 decoding
+
+Simple Message Sign and Verify
+------------------------------
+
+Sign:
+
+- Convert message to NSData using UTF8 encoding
+- Calculate the NSData's SHA512 digest
+- Sign with the private key using OAEP padding with SHA512 digest
+- Base64 encode the sign
+
+Verify:
+
+- Base64 decode the sign
+- Convert message to NSData using UTF8 encoding
+- Calculate the NSData's SHA512 digest
+- Verify with the public key using OAEP padding with SHA512 digest
 
 -----
 
