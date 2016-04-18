@@ -137,7 +137,7 @@ private class PKCS8 {
 		
 		//https://lapo.it/asn1js/
 		static private func stripHeaderIfAny(derKey: NSData) throws -> NSData {
-			var bytes = derKey.arrayOfBytes()
+			let bytes = derKey.arrayOfBytes()
 			
 			var offset = 0
 			guard bytes[offset] == 0x30 else {
@@ -222,7 +222,7 @@ private class PKCS8 {
 		
 		//https://lapo.it/asn1js/
 		static private func stripHeaderIfAny(derKey: NSData) throws -> NSData {
-			var bytes = derKey.arrayOfBytes()
+			let bytes = derKey.arrayOfBytes()
 			
 			var offset = 0
 			guard bytes[offset] == 0x30 else {
