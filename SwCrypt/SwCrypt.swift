@@ -458,7 +458,7 @@ private class PEM {
 			let key = NSMutableData()
 			key.appendData(pass)
 			key.appendData(salt)
-			return CC.md5(key)
+			return CC.digest(.MD5, data: key)
 		}
 		
 		static private func getAES256Key(passphrase: String, iv: NSData) -> NSData {
@@ -470,7 +470,7 @@ private class PEM {
 			let first = NSMutableData()
 			first.appendData(pass)
 			first.appendData(salt)
-			let aes128Key = CC.md5(first)
+			let aes128Key = CC.digest(.MD5, data: first)
 			
 			let sec = NSMutableData()
 			sec.appendData(aes128Key)
@@ -479,7 +479,7 @@ private class PEM {
 			
 			let aes256Key = NSMutableData()
 			aes256Key.appendData(aes128Key)
-			aes256Key.appendData(CC.md5(sec))
+			aes256Key.appendData(CC.digest(.MD5, data: sec))
 			return aes256Key
 		}
 		
@@ -663,7 +663,7 @@ public class SMSV {
 	
 	static public func signData(data: NSData, pemKey: String) throws -> NSData {
 		let derKey = try SwPrivateKey.pemToPKCS1DER(pemKey)
-		let hash = CC.sha512(data)
+		let hash = CC.digest(.SHA512, data: data)
 		let signedData = try CC.RSA.sign(hash, derKey: derKey, padding: .OAEP, digest: .SHA512)
 		return signedData
 	}
@@ -678,7 +678,7 @@ public class SMSV {
 	
 	static public func verifyData(data: NSData, pemKey: String, signData: NSData) throws -> Bool {
 		let derKey = try SwPublicKey.pemToPKCS1DER(pemKey)
-		let hash = CC.sha512(data)
+		let hash = CC.digest(.SHA512, data: data)
 		return try CC.RSA.verify(hash, derKey: derKey, padding: .OAEP, digest: .SHA512, signedData: signData)
 	}
 	
@@ -718,47 +718,24 @@ public class CC {
 		return data
 	}
 	
-	static public func sha1(data: NSData) -> NSData {
-		let result = NSMutableData(length: HMACAlg.SHA1.digestLength)!
-		CC_SHA1!(data: data.bytes, len: CC_LONG(data.length),
-		        md: UnsafeMutablePointer<UInt8>(result.mutableBytes))
-		return result
+	public typealias CCDigestAlgorithm = UInt32
+	public enum DigestAlgorithm : CCDigestAlgorithm {
+		case None = 0
+		case MD5 = 3
+		case RMD128 = 4, RMD160 = 5, RMD256	= 6, DigestRMD320 = 7
+		case SHA1 = 8
+		case SHA224 = 9, SHA256 = 10, SHA384 = 11, SHA512 = 12
 	}
 	
-	static public func sha256(data: NSData) -> NSData {
-		let result = NSMutableData(length: HMACAlg.SHA256.digestLength)!
-		CC_SHA256!(data: data.bytes, len: CC_LONG(data.length),
-		          md: UnsafeMutablePointer<UInt8>(result.mutableBytes))
-		return result
+	static public func digest(algorithm: DigestAlgorithm, data: NSData) -> NSData {
+		let output = NSMutableData(length: CCDigestGetOutputSize!(algorithm: algorithm.rawValue))!
+		CCDigest!(algorithm: algorithm.rawValue,
+		          data: data.bytes,
+		          dataLen: data.length,
+		          output: output.mutableBytes)
+		return output
 	}
 	
-	static public func sha384(data: NSData) -> NSData {
-		let result = NSMutableData(length: HMACAlg.SHA384.digestLength)!
-		CC_SHA384!(data: data.bytes, len: CC_LONG(data.length),
-		          md: UnsafeMutablePointer<UInt8>(result.mutableBytes))
-		return result
-	}
-	
-	static public func sha512(data: NSData) -> NSData {
-		let result = NSMutableData(length: HMACAlg.SHA512.digestLength)!
-		CC_SHA512!(data: data.bytes, len: CC_LONG(data.length),
-		          md: UnsafeMutablePointer<UInt8>(result.mutableBytes))
-		return result
-	}
-	
-	static public func sha224(data: NSData) -> NSData {
-		let result = NSMutableData(length: HMACAlg.SHA224.digestLength)!
-		CC_SHA224!(data: data.bytes, len: CC_LONG(data.length),
-		          md: UnsafeMutablePointer<UInt8>(result.mutableBytes))
-		return result
-	}
-	
-	static public func md5(data: NSData) -> NSData {
-		let result = NSMutableData(length: HMACAlg.MD5.digestLength)!
-		CC_MD5!(data: data.bytes, len: CC_LONG(data.length),
-		       md:UnsafeMutablePointer<UInt8>(result.mutableBytes))
-		return result
-	}
 	
 	public enum HMACAlg : CCHmacAlgorithm {
 		case SHA1, MD5, SHA256, SHA384, SHA512, SHA224
@@ -837,12 +814,8 @@ public class CC {
 	}
 	
 	public static func digestAvailable() -> Bool {
-		return CC_SHA1 != nil &&
-			CC_SHA256 != nil &&
-			CC_SHA384 != nil &&
-			CC_SHA512 != nil &&
-			CC_SHA224 != nil &&
-			CC_MD5 != nil
+		return CCDigest != nil &&
+			CCDigestGetOutputSize != nil
 	}
 
 	public static func randomAvailable() -> Bool {
@@ -884,10 +857,14 @@ public class CC {
 	typealias CCRandomGenerateBytesT = @convention(c) (
 		bytes: UnsafeMutablePointer<Void>,
 		count: Int) -> CCRNGStatus
-	typealias CC_HASHT = @convention(c) (
+	typealias CCDigestGetOutputSizeT = @convention(c) (
+		algorithm: CCDigestAlgorithm) -> size_t
+	typealias CCDigestT = @convention(c) (
+		algorithm: CCDigestAlgorithm,
 		data: UnsafePointer<Void>,
-		len: CC_LONG,
-		md: UnsafeMutablePointer<UInt8>) -> UnsafeMutablePointer<UInt8>
+		dataLen: size_t,
+		output: UnsafeMutablePointer<Void>) -> CInt
+
 	typealias CCHmacT = @convention(c) (
 		algorithm: CCHmacAlgorithm,
 		key: UnsafePointer<Void>,
@@ -928,12 +905,9 @@ public class CC {
 	static private let dl = dlopen("/usr/lib/system/libcommonCrypto.dylib", RTLD_NOW)
 	static private let CCRandomGenerateBytes : CCRandomGenerateBytesT? =
 		getFunc(dl, f: "CCRandomGenerateBytes")
-	static private let CC_SHA1 : CC_HASHT? = getFunc(dl, f: "CC_SHA1")
-	static private let CC_SHA256 : CC_HASHT? = getFunc(dl, f: "CC_SHA256")
-	static private let CC_SHA384 : CC_HASHT? = getFunc(dl, f: "CC_SHA384")
-	static private let CC_SHA512 : CC_HASHT? = getFunc(dl, f: "CC_SHA512")
-	static private let CC_SHA224 : CC_HASHT? = getFunc(dl, f: "CC_SHA224")
-	static private let CC_MD5 : CC_HASHT? = getFunc(dl, f: "CC_MD5")
+	static private let CCDigestGetOutputSize : CCDigestGetOutputSizeT? =
+		getFunc(dl, f: "CCDigestGetOutputSize")
+	static private let CCDigest : CCDigestT? = getFunc(dl, f: "CCDigest")
 	static private let CCHmac : CCHmacT? = getFunc(dl, f: "CCHmac")
 	static private let CCCryptorCreateWithMode : CCCryptorCreateWithModeT? =
 		getFunc(dl, f: "CCCryptorCreateWithMode")
@@ -976,20 +950,10 @@ public class CC {
 	public class RSA {
 		
 		public typealias CCAsymmetricPadding = UInt32
-		public typealias CCDigestAlgorithm = UInt32
 		
 		public enum AsymmetricPadding : CCAsymmetricPadding {
 			case PKCS1 = 1001
 			case OAEP = 1002
-		}
-		
-		public enum DigestAlgorithm : CCDigestAlgorithm {
-			case None = 0
-			case SHA1 = 8
-			case SHA224 = 9
-			case SHA256 = 10
-			case SHA384 = 11
-			case SHA512 = 12
 		}
 		
 		static public func generateKeyPair(keySize: Int = 4096) throws -> (NSData, NSData) {
@@ -1224,12 +1188,7 @@ public class CC {
 			signedData: UnsafePointer<Void>,
 			signedDataLen: size_t) -> CCCryptorStatus
 		static let CCRSACryptorVerify : CCRSACryptorVerifyT? = getFunc(dl, f: "CCRSACryptorVerify")
-	
-		typealias CCDigestGetOutputSizeT = @convention(c) (
-			algorithm: CCDigestAlgorithm) -> size_t
-		static let CCDigestGetOutputSize : CCDigestGetOutputSizeT? =
-			getFunc(dl, f: "CCDigestGetOutputSize")
-		
+
 	}
 	
 }

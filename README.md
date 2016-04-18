@@ -27,11 +27,14 @@ try CC.RSA.decrypt(data, derKey: privateKey, padding: .OAEP, digest: .SHA1)
 try CC.crypt(.encrypt, blockMode: .CBC, algorithm: .AES, padding: .PKCS7Padding, data: data, key: aesKey, iv: iv)
 try CC.crypt(.decrypt, blockMode: .GCM, algorithm: .AES, padding: .PKCS7Padding, data: data, key: aesKey, iv: iv)
 ```
-### HMAC and HASH functions
+### Digest functions
 ```
-CC.md5(data)
-CC.sha256(data)
-CC.sha512(data)
+CC.digest(.MD5, data: data)
+CC.digest(.SHA256, data: data)
+CC.digest(.SHA512, data: data)
+```
+### HMAC function
+```
 CC.HMAC(data, alg: .SHA512, key: key)
 ```
 ### Upsert, get, delete keys from KeyStore
