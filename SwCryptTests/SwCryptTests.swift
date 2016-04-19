@@ -40,12 +40,12 @@ class SwCryptTest: XCTestCase {
 		let sha512 = "016748fad47ddfba4fcd19aacc67ee031dfef40f5e9692c84f8846e520f2a827a4ea5035af8a66686c60796a362c30e6c473cfdbb9d86f43312001fc0b660734".dataFromHexadecimalString()!
 		let sha224 = "ec92519bb9e82a79097b0dd0618927b3262a70d6f02bd667c413009e".dataFromHexadecimalString()!
 		let md5 = "9b43f853613732cfc8531ed6bcbf6d68".dataFromHexadecimalString()!
-		XCTAssert(CC.digest(.SHA1, data: testData) == sha1)
-		XCTAssert(CC.digest(.SHA256, data: testData) == sha256)
-		XCTAssert(CC.digest(.SHA384, data: testData) == sha384)
-		XCTAssert(CC.digest(.SHA512, data: testData) == sha512)
-		XCTAssert(CC.digest(.SHA224, data: testData) == sha224)
-		XCTAssert(CC.digest(.MD5, data: testData) == md5)
+		XCTAssert(CC.digest(testData, alg: .SHA1) == sha1)
+		XCTAssert(CC.digest(testData, alg: .SHA256) == sha256)
+		XCTAssert(CC.digest(testData, alg: .SHA384) == sha384)
+		XCTAssert(CC.digest(testData, alg: .SHA512) == sha512)
+		XCTAssert(CC.digest(testData, alg: .SHA224) == sha224)
+		XCTAssert(CC.digest(testData, alg: .MD5) == md5)
 	}
 	
     func testCreateKeyPair() {

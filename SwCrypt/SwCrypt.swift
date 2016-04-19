@@ -458,7 +458,7 @@ private class PEM {
 			let key = NSMutableData()
 			key.appendData(pass)
 			key.appendData(salt)
-			return CC.digest(.MD5, data: key)
+			return CC.digest(key, alg: .MD5)
 		}
 		
 		static private func getAES256Key(passphrase: String, iv: NSData) -> NSData {
@@ -470,7 +470,7 @@ private class PEM {
 			let first = NSMutableData()
 			first.appendData(pass)
 			first.appendData(salt)
-			let aes128Key = CC.digest(.MD5, data: first)
+			let aes128Key = CC.digest(first, alg: .MD5)
 			
 			let sec = NSMutableData()
 			sec.appendData(aes128Key)
@@ -479,7 +479,7 @@ private class PEM {
 			
 			let aes256Key = NSMutableData()
 			aes256Key.appendData(aes128Key)
-			aes256Key.appendData(CC.digest(.MD5, data: sec))
+			aes256Key.appendData(CC.digest(sec, alg: .MD5))
 			return aes256Key
 		}
 		
@@ -663,7 +663,7 @@ public class SMSV {
 	
 	static public func signData(data: NSData, pemKey: String) throws -> NSData {
 		let derKey = try SwPrivateKey.pemToPKCS1DER(pemKey)
-		let hash = CC.digest(.SHA512, data: data)
+		let hash = CC.digest(data, alg: .SHA512)
 		let signedData = try CC.RSA.sign(hash, derKey: derKey, padding: .OAEP, digest: .SHA512)
 		return signedData
 	}
@@ -678,7 +678,7 @@ public class SMSV {
 	
 	static public func verifyData(data: NSData, pemKey: String, signData: NSData) throws -> Bool {
 		let derKey = try SwPublicKey.pemToPKCS1DER(pemKey)
-		let hash = CC.digest(.SHA512, data: data)
+		let hash = CC.digest(data, alg: .SHA512)
 		return try CC.RSA.verify(hash, derKey: derKey, padding: .OAEP, digest: .SHA512, signedData: signData)
 	}
 	
@@ -727,9 +727,9 @@ public class CC {
 		case SHA224 = 9, SHA256 = 10, SHA384 = 11, SHA512 = 12
 	}
 	
-	static public func digest(algorithm: DigestAlgorithm, data: NSData) -> NSData {
-		let output = NSMutableData(length: CCDigestGetOutputSize!(algorithm: algorithm.rawValue))!
-		CCDigest!(algorithm: algorithm.rawValue,
+	static public func digest(data: NSData, alg: DigestAlgorithm) -> NSData {
+		let output = NSMutableData(length: CCDigestGetOutputSize!(algorithm: alg.rawValue))!
+		CCDigest!(algorithm: alg.rawValue,
 		          data: data.bytes,
 		          dataLen: data.length,
 		          output: output.mutableBytes)

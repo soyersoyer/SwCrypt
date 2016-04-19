@@ -29,9 +29,9 @@ try CC.crypt(.decrypt, blockMode: .GCM, algorithm: .AES, padding: .PKCS7Padding,
 ```
 ### Digest functions
 ```
-CC.digest(.MD5, data: data)
-CC.digest(.SHA256, data: data)
-CC.digest(.SHA512, data: data)
+CC.digest(data, alg: .MD5)
+CC.digest(data, alg: .SHA256)
+CC.digest(data, alg: .SHA512)
 ```
 ### HMAC function
 ```
