@@ -700,7 +700,7 @@ public class CC {
 		case Unknown = -2147483648
 		init(status: CCCryptorStatus) {
 			self = CCError(rawValue: status) ?? .Unknown
-			print(self)
+			print("CCError: \(self) \(status)")
 		}
 		static func check(status: CCCryptorStatus) throws {
 			guard status == noErr else {

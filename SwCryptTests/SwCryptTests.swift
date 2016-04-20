@@ -178,7 +178,6 @@ class SwCryptTest: XCTestCase {
 		XCTAssert(CC.KeyDerivation.available())
 		let stretched = try? CC.KeyDerivation.PBKDF2(password, salt: salt, prf: .SHA256, rounds: 4096)
 		XCTAssert(stretched != nil)
-		print(stretched!)
 		let t = "c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a".dataFromHexadecimalString()
 		XCTAssert(t == stretched!)
 	}
