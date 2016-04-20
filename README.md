@@ -32,8 +32,8 @@ try CC.crypt(.decrypt, blockMode: .CFB, algorithm: .AES, padding: .PKCS7Padding,
 ```
 ### Encrypt, decrypt data with symmetric authenticating ciphers
 ```
-try CC.crypt(.encrypt, blockMode: .GCM, algorithm: .AES, data: data, aData: aData, key: aesKey, iv: iv, tagLength: tagLength)
-try CC.crypt(.decrypt, blockMode: .CCM, algorithm: .AES, data: data, aData: aData, key: aesKey, iv: iv, tagLength: tagLength)
+try CC.cryptAuth(.encrypt, blockMode: .GCM, algorithm: .AES, data: data, aData: aData, key: aesKey, iv: iv, tagLength: tagLength)
+try CC.cryptAuth(.decrypt, blockMode: .CCM, algorithm: .AES, data: data, aData: aData, key: aesKey, iv: iv, tagLength: tagLength)
 ```
 ### Digest functions
 ```
