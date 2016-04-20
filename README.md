@@ -88,7 +88,7 @@ When encrypting using a public key:
   - AES key (depends on aes mode - 16, 24, 32 byte)
   - IV (depends on cipher mode - 16, 12 byte)
 - Encrypt message header with the public key with OAEP padding (size = RSA key size)
-- Encrypt message with the chosen aes and cipher mode
+- Encrypt message with the chosen aes and cipher mode (GCM mode: aData: plain header)
 - Append encrypted header and messsage
 - Calculate HMAC for them with the chosen algorithm
 - Append HMAC to the previously appended data
@@ -100,7 +100,7 @@ When decrypting using a private key:
 - Decrypt the first block (RSA key size)
 - Read the message header (Version, AES mode, Cipher mode, HMAC mode), AES key, IV
 - Check the HMAC
-- Decrypt message
+- Decrypt message (GCM mode: aData: plain header)
 - Convert NSData to string with UTF8 decoding
 
 Simple Message Sign and Verify

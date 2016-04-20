@@ -512,12 +512,6 @@ public class SEM {
 			case .GCM: return 12
 			}
 		}
-		var cc: CC.BlockMode {
-			switch self {
-			case .CBC: return .CBC
-			case .GCM: return .GCM
-			}
-		}
 	}
 	
 	public enum HMACMode : UInt8 {
@@ -580,9 +574,13 @@ public class SEM {
 		let derKey = try SwPublicKey.pemToPKCS1DER(pemKey)
 		
 		let encryptedHeader = try CC.RSA.encrypt(header, derKey: derKey, padding: .OAEP, digest: .SHA1)
-		let encryptedData = try CC.crypt(.encrypt, blockMode: mode.block.cc,
-		                                 algorithm: .AES, padding: .PKCS7Padding,
-		                                 data: data, key: aesKey, iv: iv)
+		let encryptedData = mode.block == .CBC ?
+			try CC.crypt(.encrypt, blockMode: .CBC,
+			             algorithm: .AES, padding: .PKCS7Padding,
+			             data: data, key: aesKey, iv: iv)
+			: try CC.cryptAuth(.encrypt, blockMode: .GCM, algorithm: .AES,
+			                   data: data, aData: header,
+			                   key: aesKey, iv: iv, tagLength: 16)
 		
 		let result = NSMutableData()
 		result.appendData(encryptedHeader)
@@ -601,7 +599,12 @@ public class SEM {
 		
 		try checkHMAC(data, aesKey: aesKey, mode: mode.hmac)
 		let encryptedData = tail.subdataWithRange(NSRange(location: 0, length: tail.length - mode.hmac.digestLength))
-		return try CC.crypt(.decrypt, blockMode: mode.block.cc, algorithm: .AES, padding: .PKCS7Padding, data: encryptedData, key: aesKey, iv: iv)
+		if mode.block == .CBC {
+			return try CC.crypt(.decrypt, blockMode: .CBC, algorithm: .AES, padding: .PKCS7Padding, data: encryptedData, key: aesKey, iv: iv)
+		}
+		else {
+			return try CC.cryptAuth(.decrypt, blockMode: .GCM, algorithm: .AES, data: encryptedData, aData: header, key: aesKey, iv: iv, tagLength: 16)
+		}
 	}
 	
 	static private func checkHMAC(data: NSData, aesKey: NSData, mode: SEM.HMACMode) throws {
