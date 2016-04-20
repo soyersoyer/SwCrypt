@@ -860,6 +860,7 @@ public class CC {
 			randomAvailable() &&
 			hmacAvailable() &&
 			cryptorAvailable() &&
+			KeyDerivation.available() &&
 			RSA.available() &&
 			GCM.available() &&
 			CCM.available()
@@ -1290,6 +1291,54 @@ public class CC {
 			signedData: UnsafePointer<Void>,
 			signedDataLen: size_t) -> CCCryptorStatus
 		static let CCRSACryptorVerify : CCRSACryptorVerifyT? = getFunc(dl, f: "CCRSACryptorVerify")
+
+	}
+	
+	public class KeyDerivation {
+		
+		public typealias CCPseudoRandomAlgorithm = UInt32
+		public enum PRFAlg : CCPseudoRandomAlgorithm {
+			case SHA1 = 1, SHA224, SHA256, SHA384, SHA512
+			var cc : CC.HMACAlg {
+				switch self {
+				case .SHA1: return .SHA1
+				case .SHA224: return .SHA224
+				case .SHA256: return .SHA256
+				case .SHA384: return .SHA384
+				case .SHA512: return .SHA512
+				}
+			}
+		}
+		
+		static public func PBKDF2(password: String, salt: NSData,
+		                         prf: PRFAlg, rounds: UInt32) throws -> NSData {
+			
+			let result = NSMutableData(length:prf.cc.digestLength)!
+			let passwData = password.dataUsingEncoding(NSUTF8StringEncoding)!
+			try CCError.check(CCKeyDerivationPBKDF!(algorithm: PBKDFAlgorithm.PBKDF2.rawValue,
+			                      password: passwData.bytes, passwordLen: passwData.length,
+			                      salt: salt.bytes, saltLen: salt.length,
+			                      prf: prf.rawValue, rounds: rounds,
+			                      derivedKey: result.mutableBytes, derivedKeyLen: result.length))
+			return result
+		}
+		
+		static public func available() -> Bool {
+			return CCKeyDerivationPBKDF != nil
+		}
+		
+		typealias CCPBKDFAlgorithm = UInt32
+		enum PBKDFAlgorithm : CCPBKDFAlgorithm {
+			case PBKDF2 = 2
+		}
+		
+		typealias CCKeyDerivationPBKDFT = @convention(c) (
+			algorithm: CCPBKDFAlgorithm,
+			password: UnsafePointer<Void>, passwordLen: size_t,
+			salt: UnsafePointer<Void>, saltLen: size_t,
+			prf: CCPseudoRandomAlgorithm, rounds: uint,
+			derivedKey: UnsafeMutablePointer<Void>, derivedKeyLen: size_t) -> CCCryptorStatus
+		static let CCKeyDerivationPBKDF : CCKeyDerivationPBKDFT? = getFunc(dl, f: "CCKeyDerivationPBKDF")
 
 	}
 	

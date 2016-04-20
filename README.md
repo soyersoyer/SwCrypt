@@ -45,6 +45,10 @@ CC.digest(data, alg: .SHA512)
 ```
 CC.HMAC(data, alg: .SHA512, key: key)
 ```
+### KeyDerivation
+```
+CC.KeyDerivation.PBKDF2(password, salt: salt, prf: .SHA256, rounds: 4096)
+```
 ### Upsert, get, delete keys from KeyStore
 ```
 try SwKeyStore.upsertKey(privateKeyPEM, keyTag: "priv", options: [kSecAttrAccessible:kSecAttrAccessibleWhenUnlockedThisDeviceOnly])
@@ -127,6 +131,7 @@ let digestAvailable : Bool = CC.digestAvailable()
 let ramdomAvailable : Bool = CC.randomAvailable(()
 let hmacAvailable : Bool = CC.hmacAvailable()
 let cryptorAvailable : Bool = CC.cryptorAvailable
+let keyDerivationAvailable : Bool = CC.KeyDerivation.available()
 let rsaAvailable : Bool = CC.RSA.available()
 let gcmAvailable : Bool = CC.GCM.available()
 let ccmAvailable : Bool = CC.CCM.available()
