@@ -107,24 +107,12 @@ class SwCryptTest: XCTestCase {
 	}
 	
 	func encryptDecrypt(privKey: String, pubKey: String) {
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES128, block:.CBC, hmac:.None))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES128, block:.CBC, hmac:.SHA256))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES128, block:.CBC, hmac:.SHA512))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES128, block:.GCM, hmac:.None))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES128, block:.GCM, hmac:.SHA256))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES128, block:.GCM, hmac:.SHA512))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES192, block:.CBC, hmac:.None))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES192, block:.CBC, hmac:.SHA256))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES192, block:.CBC, hmac:.SHA512))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES192, block:.GCM, hmac:.None))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES192, block:.GCM, hmac:.SHA256))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES192, block:.GCM, hmac:.SHA512))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES256, block:.CBC, hmac:.None))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES256, block:.CBC, hmac:.SHA256))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES256, block:.CBC, hmac:.SHA512))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES256, block:.GCM, hmac:.None))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES256, block:.GCM, hmac:.SHA256))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES256, block:.GCM, hmac:.SHA512))
+		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES128, block:.CBC_SHA256))
+		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES128, block:.GCM))
+		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES192, block:.CBC_SHA256))
+		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES192, block:.GCM))
+		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES256, block:.CBC_SHA256))
+		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES256, block:.GCM))
 	}
 	
 	func testEncryptGeneratedKeyPair() {

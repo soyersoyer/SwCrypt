@@ -7,7 +7,6 @@ enum SwError : ErrorType {
 	case PEMParse
 	case SEMParse
 	case SEMUnsupportedVersion
-	case SEMMessageAuthentication
 }
 
 public class SwKeyStore {
@@ -504,49 +503,27 @@ public class SEM {
 	}
 	
 	public enum BlockMode : UInt8 {
-		case CBC, GCM
+		case CBC_SHA256, GCM
 		
 		var ivSize: Int {
 			switch self {
-			case .CBC: return 16
+			case .CBC_SHA256: return 16
 			case .GCM: return 12
 			}
 		}
-	}
-	
-	public enum HMACMode : UInt8 {
-		case None, SHA256, SHA512
-		
-		var cc: CC.HMACAlg?  {
-			switch self {
-			case .None: return nil
-			case .SHA256: return .SHA256
-			case .SHA512: return .SHA512
-			}
-		}
-		var digestLength: Int {
-			switch self {
-			case .None: return 0
-			default: return self.cc!.digestLength
-			}
-		}
-
 	}
 	
 	public struct Mode {
 		let version : UInt8 = 0
 		let aes: AESMode
 		let block: BlockMode
-		let hmac: HMACMode
 		public init() {
 			aes = .AES256
-			block = .CBC
-			hmac = .SHA256
+			block = .CBC_SHA256
 		}
-		public init(aes: AESMode, block: BlockMode, hmac: HMACMode) {
+		public init(aes: AESMode, block: BlockMode) {
 			self.aes = aes
 			self.block = block
-			self.hmac = hmac
 		}
 	}
 	
@@ -574,20 +551,12 @@ public class SEM {
 		let derKey = try SwPublicKey.pemToPKCS1DER(pemKey)
 		
 		let encryptedHeader = try CC.RSA.encrypt(header, derKey: derKey, padding: .OAEP, digest: .SHA1)
-		let encryptedData = mode.block == .CBC ?
-			try CC.crypt(.encrypt, blockMode: .CBC,
-			             algorithm: .AES, padding: .PKCS7Padding,
-			             data: data, key: aesKey, iv: iv)
-			: try CC.cryptAuth(.encrypt, blockMode: .GCM, algorithm: .AES,
-			                   data: data, aData: header,
-			                   key: aesKey, iv: iv, tagLength: 16)
+		let encryptedData = try cryptAuth(.encrypt, blockMode: mode.block,
+			                   data: data, aData: encryptedHeader,
+			                   key: aesKey, iv: iv)
 		
-		let result = NSMutableData()
-		result.appendData(encryptedHeader)
+		let result = NSMutableData(data: encryptedHeader)
 		result.appendData(encryptedData)
-		if mode.hmac != .None {
-			result.appendData(CC.HMAC(result, alg: mode.hmac.cc!, key: aesKey))
-		}
 		return result
 	}
 	
@@ -597,36 +566,68 @@ public class SEM {
 		let (header, tail) =  try CC.RSA.decrypt(data, derKey: derKey, padding: .OAEP, digest: .SHA1)
 		let (mode, aesKey, iv) = try parseMessageHeader(header)
 		
-		try checkHMAC(data, aesKey: aesKey, mode: mode.hmac)
-		let encryptedData = tail.subdataWithRange(NSRange(location: 0, length: tail.length - mode.hmac.digestLength))
-		if mode.block == .CBC {
-			return try CC.crypt(.decrypt, blockMode: .CBC, algorithm: .AES, padding: .PKCS7Padding, data: encryptedData, key: aesKey, iv: iv)
+		let encryptedHeader = data.subdataWithRange(NSRange(location:0, length: data.length - tail.length))
+		let encryptedData = tail
+		return try cryptAuth(.decrypt, blockMode: mode.block, data: encryptedData, aData: encryptedHeader, key: aesKey, iv: iv)
+	}
+	
+	static private func cryptAuth(opMode: CC.OpMode, blockMode: BlockMode,
+	                              data: NSData, aData: NSData,
+	                              key: NSData, iv: NSData) throws -> NSData {
+		
+		if blockMode == .CBC_SHA256 {
+			return try cryptAuth(opMode, blockMode: .CBC, hmacAlg: .SHA256,
+			                     data: data, aData: aData, key: key, iv:iv)
 		}
-		else {
-			return try CC.cryptAuth(.decrypt, blockMode: .GCM, algorithm: .AES, data: encryptedData, aData: header, key: aesKey, iv: iv, tagLength: 16)
+		else /* GCM */ {
+			return try CC.cryptAuth(opMode, blockMode: .GCM, algorithm: .AES,
+			                        data: data, aData: aData,
+			                        key: key, iv: iv, tagLength: 16)
 		}
 	}
 	
-	static private func checkHMAC(data: NSData, aesKey: NSData, mode: SEM.HMACMode) throws {
-		if mode != .None {
-			let hmaccedData = data.subdataWithRange(NSRange(location: 0, length: data.length - mode.digestLength))
-			let hmac = data.subdataWithRange(NSRange(location: data.length - mode.digestLength, length: mode.digestLength))
-			guard CC.HMAC(hmaccedData, alg: mode.cc!, key: aesKey) == hmac else {
-				throw SwError.SEMMessageAuthentication
+	static private func cryptAuth(opMode: CC.OpMode, blockMode: CC.BlockMode,
+	                              hmacAlg: CC.HMACAlg,
+	                              data: NSData, aData: NSData,
+	                              key: NSData, iv:NSData) throws -> NSData {
+		if opMode == .encrypt {
+			//encrypt then mac
+			let encryptedData = try CC.crypt(.encrypt, blockMode: blockMode,
+			                                 algorithm: .AES, padding: .PKCS7Padding,
+			                                 data: data, key: key, iv: iv)
+			let macData = NSMutableData(data: aData)
+			macData.appendData(encryptedData)
+			let hmac = CC.HMAC(macData, alg: hmacAlg, key: key)
+			let result = NSMutableData(data: encryptedData)
+			result.appendData(hmac)
+			return result
+		}
+		else {
+			let encryptedData = data.subdataWithRange(NSRange(location:0, length: data.length - hmacAlg.digestLength))
+			let macData = NSMutableData(data: aData)
+			macData.appendData(encryptedData)
+			
+			let hmac = data.subdataWithRange(NSRange(location: data.length - hmacAlg.digestLength, length: hmacAlg.digestLength))
+			
+			guard CC.HMAC(macData, alg: hmacAlg, key: key) == hmac else {
+				throw CC.CCError.DecodeError
 			}
+			return try CC.crypt(.decrypt, blockMode: blockMode,
+			                                 algorithm: .AES, padding: .PKCS7Padding,
+			                                 data: encryptedData, key: key, iv: iv)
 		}
 	}
 	
 	static private func getMessageHeader(mode: Mode, aesKey: NSData, iv: NSData) -> NSData {
-		let header : [UInt8] = [mode.version, mode.aes.rawValue, mode.block.rawValue, mode.hmac.rawValue]
-		let message = NSMutableData(bytes: header, length: 4)
+		let header : [UInt8] = [mode.version, mode.aes.rawValue, mode.block.rawValue]
+		let message = NSMutableData(bytes: header, length: 3)
 		message.appendData(aesKey)
 		message.appendData(iv)
 		return message
 	}
 	
 	static private func parseMessageHeader(header: NSData) throws -> (Mode, NSData, NSData) {
-		guard header.length > 4 else {
+		guard header.length > 3 else {
 			throw SwError.SEMParse
 		}
 		let bytes = header.arrayOfBytes()
@@ -640,18 +641,15 @@ public class SEM {
 		guard let block = BlockMode(rawValue: bytes[2]) else {
 			throw SwError.SEMParse
 		}
-		guard let hmac = HMACMode(rawValue: bytes[3]) else {
-			throw SwError.SEMParse
-		}
 		let keySize = aes.keySize
 		let ivSize = block.ivSize
-		guard header.length == 4 + keySize + ivSize else {
+		guard header.length == 3 + keySize + ivSize else {
 			throw SwError.SEMParse
 		}
-		let key = header.subdataWithRange(NSRange(location: 4, length: keySize))
-		let iv = header.subdataWithRange(NSRange(location: 4 + keySize, length: ivSize))
+		let key = header.subdataWithRange(NSRange(location: 3, length: keySize))
+		let iv = header.subdataWithRange(NSRange(location: 3 + keySize, length: ivSize))
 		
-		return (Mode(aes: aes, block: block, hmac: hmac), key, iv)
+		return (Mode(aes: aes, block: block), key, iv)
 	}	
 }
 

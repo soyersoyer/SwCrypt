@@ -56,10 +56,9 @@ try SwKeyStore.delKey("priv")
 (works with OpenSSL PEM formatted keys too)
 ```
 //public enum AESMode : UInt8 {case AES128, AES192, AES256}
-//public enum BlockMode : UInt8 {case CBC, GCM}
-//public enum HMACMode : UInt8 {case None, SHA256, SHA512}
+//public enum BlockMode : UInt8 {case CBC_SHA256, GCM}
 
-let mode = SEM.Mode(aes:.AES256, block:.CBC, hmac:.SHA512)
+let mode = SEM.Mode(aes:.AES256, block:.CBC_SHA256)
 try SEM.encryptMessage(testMessage, pemKey: publicKey, mode: mode)
 try SEM.decryptMessage(encMessage, pemKey: privateKey)
 try SEM.encryptData(testData, pemKey: publicKey, mode: mode)
@@ -84,23 +83,19 @@ When encrypting using a public key:
   - Version indicator 1 byte (current: 0)
   - AES mode 1 byte
   - Cipher mode 1 byte
-  - HMAC mode 1 byte
   - AES key (depends on aes mode - 16, 24, 32 byte)
   - IV (depends on cipher mode - 16, 12 byte)
 - Encrypt message header with the public key with OAEP padding (size = RSA key size)
-- Encrypt message with the chosen aes and cipher mode (GCM mode: aData: plain header)
+- Encrypt message with the chosen aes and cipher mode (calculate message auth tag with aData: encrypted header, and append to the encrypted message)
 - Append encrypted header and messsage
-- Calculate HMAC for them with the chosen algorithm
-- Append HMAC to the previously appended data
 - Base64 encode
 
 When decrypting using a private key:
 
 - Base64 decode
 - Decrypt the first block (RSA key size)
-- Read the message header (Version, AES mode, Cipher mode, HMAC mode), AES key, IV
-- Check the HMAC
-- Decrypt message (GCM mode: aData: plain header)
+- Read the message header (Version, AES mode, Cipher mode), AES key, IV
+- Decrypt message (check message auth with aData: encrypted header)
 - Convert NSData to string with UTF8 decoding
 
 Simple Message Sign and Verify
