@@ -149,4 +149,38 @@ class SwCryptTest: XCTestCase {
 		XCTAssert(verified == true)
 	}
 	
+	func testCCM() {
+		let data = "hello".dataUsingEncoding(NSUTF8StringEncoding)!
+		let key = "8B142BB0FA0043C32821BB90A3453884".dataFromHexadecimalString()!
+		let iv = "B5863BD2ABBED31DC26C4EDB5A".dataFromHexadecimalString()!
+		let aData = "hello".dataUsingEncoding(NSUTF8StringEncoding)!
+		let tagLength = 16
+		XCTAssert(CC.CCM.available())
+		
+		let enc = try? CC.CCM.crypt(.encrypt, algorithm: .AES, data: data, key: key, iv: iv, aData: aData, tagLength: tagLength)
+		XCTAssert(enc != nil)
+		let dec = try? CC.CCM.crypt(.decrypt, algorithm: .AES, data: enc!.0, key: key, iv: iv, aData: aData, tagLength: tagLength)
+		XCTAssert(dec != nil)
+		XCTAssert(enc!.1 == dec!.1)
+		XCTAssert(dec!.0 == data)
+	}
+	
+	func testCCMSJCL() {
+		let data = "hello".dataUsingEncoding(NSUTF8StringEncoding)!
+		let key = "8B142BB0FA0043C32821BB90A3453884".dataFromHexadecimalString()!
+		let iv = "B5863BD2ABBED31DC26C4EDB5A".dataFromHexadecimalString()!
+		let aData = "hello".dataUsingEncoding(NSUTF8StringEncoding)!
+		let tagLength = 16
+		let sjclCipher = NSData(base64EncodedString: "VqAna25S22M+yOZz57wCllx7Itql", options: [])!
+		XCTAssert(CC.CCM.available())
+		
+		let enc = try? CC.cryptAuth(.encrypt, blockMode: .CCM, algorithm: .AES, data: data, aData: aData, key: key, iv: iv, tagLength: tagLength)
+		XCTAssert(enc != nil)
+		XCTAssert(enc! == sjclCipher)
+		
+		let dec = try? CC.cryptAuth(.decrypt, blockMode: .CCM, algorithm: .AES, data: sjclCipher, aData: aData, key: key, iv: iv, tagLength: tagLength)
+		XCTAssert(dec != nil)
+		XCTAssert(dec! == data)
+	}
+
 }

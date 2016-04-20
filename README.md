@@ -20,12 +20,20 @@ let publicKeyDER = SwPulbicKey.pemToPKCS1DER(publicKeyPEM)
 try SwEncryptedPrivateKey.encryptPEM(privateKeyPEM, passphrase: "longpassword", mode: .AES256CBC)
 try SwEncryptedPrivateKey.decryptPEM(privEncrypted, passphrase: "longpassword")
 ```
-### Encrypt/decrypt data with RSA or symmetric ciphers
+### Encrypt, decrypt data with RSA
 ```
 try CC.RSA.encrypt(data, derKey: publicKey, padding: .OAEP, digest: .SHA1)
 try CC.RSA.decrypt(data, derKey: privateKey, padding: .OAEP, digest: .SHA1)
+```
+### Encrypt, decrypt data with symmetric ciphers
+```
 try CC.crypt(.encrypt, blockMode: .CBC, algorithm: .AES, padding: .PKCS7Padding, data: data, key: aesKey, iv: iv)
-try CC.crypt(.decrypt, blockMode: .GCM, algorithm: .AES, padding: .PKCS7Padding, data: data, key: aesKey, iv: iv)
+try CC.crypt(.decrypt, blockMode: .CFB, algorithm: .AES, padding: .PKCS7Padding, data: data, key: aesKey, iv: iv)
+```
+### Encrypt, decrypt data with symmetric authenticating ciphers
+```
+try CC.crypt(.encrypt, blockMode: .GCM, algorithm: .AES, data: data, aData: aData, key: aesKey, iv: iv, tagLength: tagLength)
+try CC.crypt(.decrypt, blockMode: .CCM, algorithm: .AES, data: data, aData: aData, key: aesKey, iv: iv, tagLength: tagLength)
 ```
 ### Digest functions
 ```
@@ -126,6 +134,7 @@ let hmacAvailable : Bool = CC.hmacAvailable()
 let cryptorAvailable : Bool = CC.cryptorAvailable
 let rsaAvailable : Bool = CC.RSA.available()
 let gcmAvailable : Bool = CC.GCM.available()
+let ccmAvailable : Bool = CC.CCM.available()
 
 or all in one turn:
 let ccAvailable : Bool = CC.available()

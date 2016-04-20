@@ -699,16 +699,12 @@ public class CC {
 		case Unknown = -2147483648
 		init(status: CCCryptorStatus) {
 			self = CCError(rawValue: status) ?? .Unknown
+			print(self)
 		}
 		static func check(status: CCCryptorStatus) throws {
 			guard status == noErr else {
-				try check(CCError(status: status))
-				return
+				throw CCError(status: status)
 			}
-		}
-		static func check(status: CCError) throws {
-			print(status)
-			throw status
 		}
 	}
 	
@@ -722,7 +718,7 @@ public class CC {
 	public enum DigestAlgorithm : CCDigestAlgorithm {
 		case None = 0
 		case MD5 = 3
-		case RMD128 = 4, RMD160 = 5, RMD256	= 6, DigestRMD320 = 7
+		case RMD128 = 4, RMD160 = 5, RMD256 = 6, RMD320 = 7
 		case SHA1 = 8
 		case SHA224 = 9, SHA256 = 10, SHA384 = 11, SHA512 = 12
 	}
@@ -766,7 +762,11 @@ public class CC {
 	}
 	
 	public enum BlockMode : CCMode {
-		case ECB = 1, CBC, CFB, CTR, F8, LRW, OFB, XTS, RC4, CFB8, GCM
+		case ECB = 1, CBC, CFB, CTR, F8, LRW, OFB, XTS, RC4, CFB8
+	}
+	
+	public enum AuthBlockMode : CCMode {
+		case GCM = 11, CCM
 	}
 	
 	public enum Algorithm : CCAlgorithm {
@@ -780,10 +780,6 @@ public class CC {
 	static public func crypt(opMode: OpMode, blockMode: BlockMode,
 	                            algorithm: Algorithm, padding: Padding,
 	                            data: NSData, key: NSData, iv: NSData) throws -> NSData {
-		if blockMode == .GCM {
-			let (result,tag) = try GCM.crypt(opMode, algorithm: algorithm, data: data, key: key, iv: iv)
-			return result
-		}
 		var cryptor : CCCryptorRef = nil
 		try CCError.check(CCCryptorCreateWithMode!(
 			op: opMode.rawValue, mode: blockMode.rawValue,
@@ -813,6 +809,30 @@ public class CC {
 		return result
 	}
 	
+	//The same behaviour as in the CCM pdf
+	//http://csrc.nist.gov/publications/nistpubs/800-38C/SP800-38C_updated-July20_2007.pdf
+	static public func cryptAuth(opMode: OpMode, blockMode: AuthBlockMode, algorithm: Algorithm,
+	                             data: NSData, aData: NSData,
+	                             key: NSData, iv: NSData, tagLength: Int) throws -> NSData {
+		let cryptFun = blockMode == .GCM ? GCM.crypt : CCM.crypt
+		if opMode == .encrypt {
+			let (cipher, tag) = try cryptFun(opMode, algorithm: algorithm, data: data, key: key, iv: iv, aData: aData, tagLength: tagLength)
+			let result = NSMutableData(data: cipher)
+			result.appendData(tag)
+			return result
+		}
+		else {
+			let cipher = data.subdataWithRange(NSRange(location:0, length:data.length - tagLength))
+			let tag = data.subdataWithRange(
+				NSRange(location:data.length - tagLength, length: tagLength))
+			let (plain, vTag) = try cryptFun(opMode, algorithm: algorithm, data: cipher, key: key, iv: iv, aData: aData, tagLength: tagLength)
+			guard tag == vTag else {
+				throw CCError.DecodeError
+			}
+			return plain
+		}
+	}
+	
 	public static func digestAvailable() -> Bool {
 		return CCDigest != nil &&
 			CCDigestGetOutputSize != nil
@@ -840,7 +860,8 @@ public class CC {
 			hmacAvailable() &&
 			cryptorAvailable() &&
 			RSA.available() &&
-			GCM.available()
+			GCM.available() &&
+			CCM.available()
 	}
 	
 	typealias CCCryptorRef = UnsafePointer<Void>
@@ -923,15 +944,17 @@ public class CC {
 	public class GCM {
 		
 		static public func crypt(opMode: OpMode, algorithm: Algorithm, data: NSData,
-		                         key: NSData, iv: NSData) throws -> (NSData, NSData) {
+		                         key: NSData, iv: NSData,
+		                         aData: NSData, tagLength: Int) throws -> (NSData, NSData) {
 			let result = NSMutableData(length: data.length)!
-			var tagLength = 16
+			var tagLength_ = tagLength
 			let tag = NSMutableData(length: tagLength)!
 			try CCError.check(CCCryptorGCM!(op: opMode.rawValue, alg: algorithm.rawValue,
 				key: key.bytes, keyLength: key.length, iv: iv.bytes, ivLen: iv.length,
-				aData: nil, aDataLen: 0, dataIn: data.bytes, dataInLength: data.length,
-				dataOut: result.mutableBytes, tag: tag.bytes, tagLength: &tagLength))
-			tag.length = tagLength
+				aData: aData.bytes, aDataLen: aData.length,
+				dataIn: data.bytes, dataInLength: data.length,
+				dataOut: result.mutableBytes, tag: tag.bytes, tagLength: &tagLength_))
+			tag.length = tagLength_
 			return (result, tag)
 		}
 		
@@ -945,6 +968,84 @@ public class CC {
 		typealias CCCryptorGCMT = @convention(c) (op: CCOperation, alg: CCAlgorithm, key: UnsafePointer<Void>, keyLength: Int, iv: UnsafePointer<Void>, ivLen: Int, aData: UnsafePointer<Void>, aDataLen: Int, dataIn: UnsafePointer<Void>, dataInLength: Int, dataOut: UnsafeMutablePointer<Void>, tag: UnsafePointer<Void>, tagLength: UnsafeMutablePointer<Int>) -> CCCryptorStatus
 		static private let CCCryptorGCM : CCCryptorGCMT? = getFunc(dl, f: "CCCryptorGCM")
 		
+	}
+	
+	public class CCM {
+		
+		static public func crypt(opMode: OpMode, algorithm: Algorithm, data: NSData,
+		                         key: NSData, iv: NSData,
+		                         aData: NSData, tagLength: Int) throws -> (NSData, NSData) {
+			var cryptor : CCCryptorRef = nil
+			try CCError.check(CCCryptorCreateWithMode!(
+				op: opMode.rawValue, mode: AuthBlockMode.CCM.rawValue,
+				alg: algorithm.rawValue, padding: Padding.NoPadding.rawValue,
+				iv: nil, key: key.bytes, keyLength: key.length,
+				tweak: nil, tweakLength: 0, numRounds: 0,
+				options: CCModeOptions(), cryptorRef: &cryptor))
+			defer { CCCryptorRelease!(cryptorRef: cryptor) }
+
+			try CCError.check(CCCryptorAddParameter!(cryptorRef: cryptor,
+				parameter: Parameter.dataSize.rawValue,
+				data: nil, dataLength: data.length))
+
+			try CCError.check(CCCryptorAddParameter!(cryptorRef: cryptor,
+				parameter: Parameter.macSize.rawValue,
+				data: nil, dataLength: tagLength))
+			
+			try CCError.check(CCCryptorAddParameter!(cryptorRef: cryptor,
+				parameter: Parameter.iv.rawValue,
+				data: iv.bytes, dataLength: iv.length))
+			
+			try CCError.check(CCCryptorAddParameter!(cryptorRef: cryptor,
+				parameter: Parameter.authData.rawValue,
+				data: aData.bytes, dataLength: aData.length))
+
+			let result = NSMutableData(length: data.length)!
+
+			var updateLen: size_t = 0
+			try CCError.check(CCCryptorUpdate!(
+				cryptorRef: cryptor,
+				dataIn: data.bytes, dataInLength: data.length,
+				dataOut: result.mutableBytes, dataOutAvailable: result.length,
+				dataOutMoved: &updateLen))
+
+			var finalLen: size_t = 0
+			try CCError.check(CCCryptorFinal!(
+				cryptorRef: cryptor,
+				dataOut: result.mutableBytes + updateLen,
+				dataOutAvailable: result.length - updateLen,
+				dataOutMoved: &finalLen))
+			result.length = updateLen + finalLen
+			
+			var tagLength_ = tagLength
+			let tag = NSMutableData(length: tagLength)!
+			try CCError.check(CCCryptorGetParameter!(cryptorRef: cryptor,
+				parameter: Parameter.authTag.rawValue,
+				data: tag.bytes, dataLength: &tagLength_))
+			tag.length = tagLength_
+			
+			return (result, tag)
+		}
+		
+		static public func available() -> Bool {
+			if CCCryptorAddParameter != nil &&
+				CCCryptorGetParameter != nil {
+				return true
+			}
+			return false
+		}
+		
+		typealias CCParameter = UInt32
+		private enum Parameter : CCParameter {
+			case iv, authData, macSize, dataSize, authTag
+		}
+		typealias CCCryptorAddParameterT = @convention(c) (cryptorRef: CCCryptorRef, parameter: CCParameter, data: UnsafePointer<Void>, dataLength: size_t) -> CCCryptorStatus
+		static private let CCCryptorAddParameter : CCCryptorAddParameterT? =
+			getFunc(dl, f: "CCCryptorAddParameter")
+		
+		typealias CCCryptorGetParameterT = @convention(c) (cryptorRef: CCCryptorRef, parameter: CCParameter, data: UnsafePointer<Void>, dataLength: UnsafeMutablePointer<size_t>) -> CCCryptorStatus
+		static private let CCCryptorGetParameter : CCCryptorGetParameterT? =
+			getFunc(dl, f: "CCCryptorGetParameter")
 	}
 	
 	public class RSA {
