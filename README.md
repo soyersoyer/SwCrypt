@@ -49,6 +49,11 @@ CC.HMAC(data, alg: .SHA512, key: key)
 ```
 CC.KeyDerivation.PBKDF2(password, salt: salt, prf: .SHA256, rounds: 4096)
 ```
+### Symmetric Key Wrapping
+```
+try CC.KeyWrap.SymmetricKeyWrap(CC.KeyWrap.rfc3394_iv, kek: kek, rawKey: rawKey)
+try CC.KeyWrap.SymmetricKeyUnwrap(CC.KeyWrap.rfc3394_iv, kek: kek, wrappedKey: wrappedKey)
+```
 ### Upsert, get, delete keys from KeyStore
 ```
 try SwKeyStore.upsertKey(privateKeyPEM, keyTag: "priv", options: [kSecAttrAccessible:kSecAttrAccessibleWhenUnlockedThisDeviceOnly])
@@ -132,6 +137,7 @@ let ramdomAvailable : Bool = CC.randomAvailable(()
 let hmacAvailable : Bool = CC.hmacAvailable()
 let cryptorAvailable : Bool = CC.cryptorAvailable
 let keyDerivationAvailable : Bool = CC.KeyDerivation.available()
+let keyWrapAvailable : Bool = CC.KeyWrap.available()
 let rsaAvailable : Bool = CC.RSA.available()
 let gcmAvailable : Bool = CC.GCM.available()
 let ccmAvailable : Bool = CC.CCM.available()

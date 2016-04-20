@@ -861,6 +861,7 @@ public class CC {
 			hmacAvailable() &&
 			cryptorAvailable() &&
 			KeyDerivation.available() &&
+			KeyWrap.available() &&
 			RSA.available() &&
 			GCM.available() &&
 			CCM.available()
@@ -1340,6 +1341,87 @@ public class CC {
 			derivedKey: UnsafeMutablePointer<Void>, derivedKeyLen: size_t) -> CCCryptorStatus
 		static let CCKeyDerivationPBKDF : CCKeyDerivationPBKDFT? = getFunc(dl, f: "CCKeyDerivationPBKDF")
 
+	}
+	
+	public class KeyWrap {
+		
+		static private let rfc3394_iv_a : [UInt8] = [0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6]
+		static public let rfc3394_iv = NSData(bytes: rfc3394_iv_a, length:rfc3394_iv_a.count)
+		
+		static public func SymmetricKeyWrap(iv: NSData,
+		                                    kek: NSData,
+		                                    rawKey: NSData) throws -> NSData {
+			let alg = WrapAlg.AES.rawValue
+			var wrappedKeyLength = CCSymmetricWrappedSize!(algorithm: alg, rawKeyLen: rawKey.length)
+			let wrappedKey = NSMutableData(length:wrappedKeyLength)!
+			try CCError.check(CCSymmetricKeyWrap!(
+				algorithm: alg,
+				iv: iv.bytes, ivLen: iv.length,
+				kek: kek.bytes, kekLen: kek.length,
+				rawKey: rawKey.bytes, rawKeyLen: rawKey.length,
+				wrappedKey: wrappedKey.mutableBytes, wrappedKeyLen:&wrappedKeyLength))
+			wrappedKey.length = wrappedKeyLength
+			return wrappedKey
+		}
+		
+		static public func SymmetricKeyUnwrap(iv: NSData,
+		                                      kek: NSData,
+		                                      wrappedKey: NSData) throws -> NSData {
+			let alg = WrapAlg.AES.rawValue
+			var rawKeyLength = CCSymmetricUnwrappedSize!(algorithm: alg, wrappedKeyLen: wrappedKey.length)
+			let rawKey = NSMutableData(length:rawKeyLength)!
+			try CCError.check(CCSymmetricKeyUnwrap!(
+				algorithm: alg,
+				iv: iv.bytes, ivLen: iv.length,
+				kek: kek.bytes, kekLen: kek.length,
+				wrappedKey: wrappedKey.bytes, wrappedKeyLen: wrappedKey.length,
+				rawKey: rawKey.mutableBytes, rawKeyLen:&rawKeyLength))
+			rawKey.length = rawKeyLength
+			return rawKey
+		}
+		
+		static public func available() -> Bool {
+			return CCSymmetricKeyWrap != nil &&
+				CCSymmetricKeyUnwrap != nil &&
+				CCSymmetricWrappedSize != nil &&
+				CCSymmetricUnwrappedSize != nil
+		}
+		
+		enum WrapAlg : CCWrappingAlgorithm {
+			case AES = 1
+		}
+		typealias CCWrappingAlgorithm = UInt32;
+		
+		typealias CCSymmetricKeyWrapT = @convention(c) (
+			algorithm: CCWrappingAlgorithm,
+			iv: UnsafePointer<Void>, ivLen: size_t,
+			kek: UnsafePointer<Void>, kekLen: size_t,
+			rawKey: UnsafePointer<Void>, rawKeyLen: size_t,
+			wrappedKey: UnsafeMutablePointer<Void>,
+			wrappedKeyLen: UnsafePointer<size_t>) -> CCCryptorStatus
+		static let CCSymmetricKeyWrap : CCSymmetricKeyWrapT? = getFunc(dl, f: "CCSymmetricKeyWrap")
+
+		typealias CCSymmetricKeyUnwrapT = @convention(c) (
+			algorithm: CCWrappingAlgorithm,
+			iv: UnsafePointer<Void>, ivLen: size_t,
+			kek: UnsafePointer<Void>, kekLen: size_t,
+			wrappedKey: UnsafePointer<Void>, wrappedKeyLen: size_t,
+			rawKey: UnsafeMutablePointer<Void>,
+			rawKeyLen: UnsafePointer<size_t>) -> CCCryptorStatus
+		static let CCSymmetricKeyUnwrap : CCSymmetricKeyUnwrapT? = getFunc(dl, f: "CCSymmetricKeyUnwrap")
+		
+		typealias CCSymmetricWrappedSizeT = @convention(c) (
+			algorithm: CCWrappingAlgorithm,
+			rawKeyLen: size_t) -> size_t
+		static let CCSymmetricWrappedSize : CCSymmetricWrappedSizeT? =
+			getFunc(dl, f: "CCSymmetricWrappedSize")
+
+		typealias CCSymmetricUnwrappedSizeT = @convention(c) (
+			algorithm: CCWrappingAlgorithm,
+			wrappedKeyLen: size_t) -> size_t
+		static let CCSymmetricUnwrappedSize : CCSymmetricUnwrappedSizeT? =
+			getFunc(dl, f: "CCSymmetricUnwrappedSize")
+		
 	}
 	
 }

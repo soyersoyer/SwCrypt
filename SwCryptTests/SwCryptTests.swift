@@ -182,4 +182,20 @@ class SwCryptTest: XCTestCase {
 		let t = "c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a".dataFromHexadecimalString()
 		XCTAssert(t == stretched!)
 	}
+	
+	func test_keyWrap() {
+		let kek = "000102030405060708090A0B0C0D0E0F".dataFromHexadecimalString()!
+		let tkey = "00112233445566778899AABBCCDDEEFF".dataFromHexadecimalString()!
+		let wrappedKey = "1FA68B0A8112B447AEF34BD8FB5A7B829D3E862371D2CFE5".dataFromHexadecimalString()!
+		
+		XCTAssert(CC.KeyWrap.available())
+		let cipher = try? CC.KeyWrap.SymmetricKeyWrap(CC.KeyWrap.rfc3394_iv, kek: kek, rawKey: tkey)
+		XCTAssert(cipher != nil)
+		XCTAssert(cipher! == wrappedKey)
+		
+		let key = try? CC.KeyWrap.SymmetricKeyUnwrap(CC.KeyWrap.rfc3394_iv, kek: kek, wrappedKey: cipher!)
+		XCTAssert(key != nil)
+		XCTAssert(key! == tkey)
+
+	}
 }
