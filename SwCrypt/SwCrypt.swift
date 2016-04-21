@@ -865,6 +865,7 @@ public class CC {
 			KeyDerivation.available() &&
 			KeyWrap.available() &&
 			RSA.available() &&
+			EC.available() &&
 			GCM.available() &&
 			CCM.available()
 	}
@@ -910,8 +911,8 @@ public class CC {
 		cryptorRef: UnsafeMutablePointer<CCCryptorRef>) -> CCCryptorStatus
 	typealias CCCryptorGetOutputLengthT = @convention(c)(
 		cryptorRef: CCCryptorRef,
-		inputLength: Int,
-		final: Bool) -> Int
+		inputLength: size_t,
+		final: Bool) -> size_t
 	typealias CCCryptorUpdateT = @convention(c)(
 		cryptorRef: CCCryptorRef,
 		dataIn: UnsafePointer<Void>,
@@ -1295,6 +1296,169 @@ public class CC {
 			signedDataLen: size_t) -> CCCryptorStatus
 		static let CCRSACryptorVerify : CCRSACryptorVerifyT? = getFunc(dl, f: "CCRSACryptorVerify")
 
+	}
+	
+	public class EC {
+		
+		static public func generateKeyPair(keySize: Int) throws -> (NSData, NSData) {
+			var privKey : CCECCryptorRef = nil
+			var pubKey : CCECCryptorRef = nil
+			try CCError.check(CCECCryptorGeneratePair!(
+				keySize: keySize,
+				publicKey: &pubKey,
+				privateKey: &privKey))
+			defer {
+				CCECCryptorRelease!(key: privKey)
+				CCECCryptorRelease!(key: pubKey)
+			}
+			
+			let privKeyDER = try exportKey(privKey, format: .ImportKeyBinary, type: .KeyPrivate)
+			let pubKeyDER = try exportKey(pubKey, format: .ImportKeyBinary, type: .KeyPublic)
+			return (privKeyDER, pubKeyDER)
+		}
+		
+		static public func signHash(privateKey: NSData, hash: NSData) throws -> NSData {
+			let privKey = try importKey(privateKey, format: .ImportKeyBinary, keyType: .KeyPrivate)
+			defer { CCECCryptorRelease!(key: privKey) }
+			
+			var signedDataLength = 4096
+			let signedData = NSMutableData(length:signedDataLength)!
+			try CCError.check(CCECCryptorSignHash!(
+				privateKey: privKey,
+				hashToSign: hash.bytes, hashSignLen: hash.length,
+				signedData: signedData.mutableBytes, signedDataLen: &signedDataLength))
+			signedData.length = signedDataLength
+			return signedData
+		}
+		
+		static public func verifyHash(publicKey: NSData, hash: NSData, signedData: NSData) throws -> Bool {
+			let pubKey = try importKey(publicKey, format: .ImportKeyBinary, keyType: .KeyPublic)
+			defer { CCECCryptorRelease!(key: pubKey) }
+			
+			var valid : UInt32 = 0
+			try CCError.check(CCECCryptorVerifyHash!(
+				publicKey:pubKey,
+				hash: hash.bytes, hashLen: hash.length,
+				signedData: signedData.bytes, signedDataLen: signedData.length,
+				valid: &valid))
+			return valid != 0
+		}
+		
+		static public func computeSharedSecret(privateKey: NSData, publicKey: NSData) throws -> NSData {
+			let privKey = try importKey(privateKey, format: .ImportKeyBinary, keyType: .KeyPrivate)
+			let pubKey = try importKey(publicKey, format: .ImportKeyBinary, keyType: .KeyPublic)
+			defer {
+				CCECCryptorRelease!(key: privKey)
+				CCECCryptorRelease!(key: pubKey)
+			}
+			
+			var outSize = 8192
+			let result = NSMutableData(length:outSize)!
+			try CCError.check(CCECCryptorComputeSharedSecret!(
+				privateKey: privKey, publicKey: pubKey, out:result.mutableBytes, outLen:&outSize))
+			result.length = outSize
+			return result
+		}
+
+		static private func importKey(key: NSData,
+		                              format: KeyExternalFormat,
+		                              keyType: KeyType) throws -> CCECCryptorRef {
+			var impKey : CCECCryptorRef = nil
+			try CCError.check(CCECCryptorImportKey!(format: format.rawValue,
+			                     keyPackage: key.bytes, keyPackageLen:key.length,
+			                     keyType: keyType.rawValue, key: &impKey))
+			return impKey
+		}
+		
+		static private func exportKey(key: CCECCryptorRef,
+		                              format: KeyExternalFormat, type: KeyType) throws -> NSData {
+			var expKeyLength = 8192
+			let expKey = NSMutableData(length:expKeyLength)!
+			try CCError.check(CCECCryptorExportKey!(
+				format: format.rawValue,
+				keyPackage: expKey.mutableBytes,
+				keyPackageLen: &expKeyLength,
+				keyType: type.rawValue,
+				key: key))
+			expKey.length = expKeyLength
+			return expKey
+		}
+		
+		static public func available() -> Bool {
+			return CCECCryptorGeneratePair != nil &&
+				CCECCryptorImportKey != nil &&
+				CCECCryptorExportKey != nil &&
+				CCECCryptorRelease != nil &&
+				CCECCryptorSignHash != nil &&
+				CCECCryptorVerifyHash != nil &&
+				CCECCryptorComputeSharedSecret != nil
+		}
+		
+		public enum KeyType : CCECKeyType {
+			case KeyPublic = 0, KeyPrivate
+			case BlankPublicKey = 97, BlankPrivateKey
+			case BadKey = 99
+		}
+		public typealias CCECKeyType = UInt32
+		
+		
+		public enum KeyExternalFormat : CCECKeyExternalFormat {
+			case ImportKeyBinary = 0, ImportKeyDER
+		}
+		public typealias CCECKeyExternalFormat = UInt32
+		
+		typealias CCECCryptorRef = UnsafePointer<Void>
+		typealias CCECCryptorGeneratePairT = @convention(c) (
+			keySize: size_t ,
+			publicKey: UnsafeMutablePointer<CCECCryptorRef>,
+			privateKey: UnsafeMutablePointer<CCECCryptorRef>) -> CCCryptorStatus
+		static let CCECCryptorGeneratePair : CCECCryptorGeneratePairT? =
+			getFunc(dl, f: "CCECCryptorGeneratePair")
+		
+		typealias CCECCryptorImportKeyT = @convention(c) (
+			format: CCECKeyExternalFormat,
+			keyPackage: UnsafePointer<Void>, keyPackageLen: size_t,
+			keyType: CCECKeyType, key: UnsafeMutablePointer<CCECCryptorRef>) -> CCCryptorStatus
+		static let CCECCryptorImportKey : CCECCryptorImportKeyT? =
+			getFunc(dl, f: "CCECCryptorImportKey")
+		
+		typealias CCECCryptorExportKeyT = @convention(c) (
+			format: CCECKeyExternalFormat,
+			keyPackage: UnsafePointer<Void>,
+			keyPackageLen: UnsafePointer<size_t>,
+			keyType: CCECKeyType , key: CCECCryptorRef) -> CCCryptorStatus
+		static let CCECCryptorExportKey : CCECCryptorExportKeyT? =
+			getFunc(dl, f: "CCECCryptorExportKey")
+		
+		typealias CCECCryptorReleaseT = @convention(c) (
+			key: CCECCryptorRef) -> Void
+		static let CCECCryptorRelease : CCECCryptorReleaseT? =
+			getFunc(dl, f: "CCECCryptorRelease")
+		
+		typealias CCECCryptorSignHashT = @convention(c)(
+			privateKey: CCECCryptorRef,
+			hashToSign: UnsafePointer<Void>,
+			hashSignLen: size_t,
+			signedData: UnsafeMutablePointer<Void>,
+			signedDataLen: UnsafeMutablePointer<size_t>) -> CCCryptorStatus
+		static let CCECCryptorSignHash : CCECCryptorSignHashT? =
+			getFunc(dl, f: "CCECCryptorSignHash")
+		
+		typealias CCECCryptorVerifyHashT = @convention(c)(
+			publicKey: CCECCryptorRef,
+			hash: UnsafePointer<Void>, hashLen: size_t,
+			signedData: UnsafePointer<Void>, signedDataLen: size_t,
+			valid: UnsafeMutablePointer<UInt32>) -> CCCryptorStatus
+		static let CCECCryptorVerifyHash : CCECCryptorVerifyHashT? =
+			getFunc(dl, f: "CCECCryptorVerifyHash")
+		
+		typealias CCECCryptorComputeSharedSecretT = @convention(c)(
+			privateKey: CCECCryptorRef,
+			publicKey: CCECCryptorRef,
+			out: UnsafeMutablePointer<Void>,
+			outLen: UnsafeMutablePointer<size_t>) -> CCCryptorStatus
+		static let CCECCryptorComputeSharedSecret : CCECCryptorComputeSharedSecretT? =
+			getFunc(dl, f: "CCECCryptorComputeSharedSecret")
 	}
 	
 	public class KeyDerivation {

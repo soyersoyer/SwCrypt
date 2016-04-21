@@ -25,6 +25,13 @@ try SwEncryptedPrivateKey.decryptPEM(privEncrypted, passphrase: "longpassword")
 try CC.RSA.encrypt(data, derKey: publicKey, padding: .OAEP, digest: .SHA1)
 try CC.RSA.decrypt(data, derKey: privateKey, padding: .OAEP, digest: .SHA1)
 ```
+### Elliptic curve functions
+```
+let keys = try? CC.EC.generateKeyPair(384)
+let signed = try? CC.EC.signHash(keys!.0, hash: hash)
+let verified = try? CC.EC.verifyHash(keys!.1, hash: hash, signedData: signed!)
+let shared = try? CC.EC.computeSharedSecret(keys!.0, publicKey: keys!.1)
+```
 ### Encrypt, decrypt data with symmetric ciphers
 ```
 try CC.crypt(.encrypt, blockMode: .CBC, algorithm: .AES, padding: .PKCS7Padding, data: data, key: aesKey, iv: iv)
@@ -139,6 +146,7 @@ let cryptorAvailable : Bool = CC.cryptorAvailable
 let keyDerivationAvailable : Bool = CC.KeyDerivation.available()
 let keyWrapAvailable : Bool = CC.KeyWrap.available()
 let rsaAvailable : Bool = CC.RSA.available()
+let ecAvailable : Bool = CC.EC.available()
 let gcmAvailable : Bool = CC.GCM.available()
 let ccmAvailable : Bool = CC.CCM.available()
 

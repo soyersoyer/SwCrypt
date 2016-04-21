@@ -195,6 +195,31 @@ class SwCryptTest: XCTestCase {
 		let key = try? CC.KeyWrap.SymmetricKeyUnwrap(CC.KeyWrap.rfc3394_iv, kek: kek, wrappedKey: cipher!)
 		XCTAssert(key != nil)
 		XCTAssert(key! == tkey)
+	}
+	
+	func test_ecGenkey() {
+		XCTAssert(CC.EC.available())
+		
+		let keys = try? CC.EC.generateKeyPair(384)
+		XCTAssert(keys != nil)
+	}
+	
+	func test_ecSignVerify() {
+		let keys = try? CC.EC.generateKeyPair(256)
+		XCTAssert(keys != nil)
+		let hash = "c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a".dataFromHexadecimalString()!
+		
+		let signed = try? CC.EC.signHash(keys!.0, hash: hash)
+		XCTAssert(signed != nil)
+		let verified = try? CC.EC.verifyHash(keys!.1, hash: hash, signedData: signed!)
+		XCTAssert(verified == true)
+	}
 
+	func test_ecSharedSecret() {
+		let keys = try? CC.EC.generateKeyPair(256)
+		XCTAssert(keys != nil)
+		
+		let shared = try? CC.EC.computeSharedSecret(keys!.0, publicKey: keys!.1)
+		XCTAssert(shared != nil)
 	}
 }
