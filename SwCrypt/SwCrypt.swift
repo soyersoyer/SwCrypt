@@ -698,13 +698,15 @@ public class CC {
 		case Overflow = -4306
 		case RNGFailure = -4307
 		case Unknown = -2147483648
-		init(status: CCCryptorStatus) {
+		init(status: CCCryptorStatus, function: String, file: String, line: Int) {
 			self = CCError(rawValue: status) ?? .Unknown
-			print("CCError: \(self) \(status)")
+			print("\(file):\(line): CCError: \(self) \(status) \(function)")
 		}
-		static func check(status: CCCryptorStatus) throws {
+		static func check(status: CCCryptorStatus,
+		                  function: String = #function,
+		                  file: String = #file, line: Int = #line) throws {
 			guard status == noErr else {
-				throw CCError(status: status)
+				throw CCError(status: status, function: function, file: file, line: line)
 			}
 		}
 	}
