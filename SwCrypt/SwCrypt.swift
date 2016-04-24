@@ -975,6 +975,7 @@ public class CC {
 			KeyDerivation.available() &&
 			KeyWrap.available() &&
 			RSA.available() &&
+			DH.available() &&
 			EC.available() &&
 			GCM.available() &&
 			CCM.available()
@@ -1428,6 +1429,93 @@ public class CC {
 			signedDataLen: size_t) -> CCCryptorStatus
 		private static let CCRSACryptorVerify : CCRSACryptorVerifyT? = getFunc(dl, f: "CCRSACryptorVerify")
 
+	}
+	
+	public class DH {
+		
+		public enum DHParam {
+			case rfc3526Group5
+		}
+		
+		//this is stateful in CommonCrypto too, sry
+		public class DH {
+			private var ref: CCDHRef = nil
+			
+			public init(dhParam: DHParam) throws {
+				ref = CCDHCreate!(dhParameter: kCCDHRFC3526Group5!)
+				guard ref != nil else {
+					throw CCError(.ParamError)
+				}
+			}
+			
+			public func generateKey() throws -> NSData {
+				var outputLength = 8192
+				let output = NSMutableData(length: outputLength)!
+				let status = CCDHGenerateKey!(
+					ref: ref,
+					output: output.mutableBytes, outputLength: &outputLength)
+				output.length = outputLength
+				guard status != -1 else {
+					throw CCError(.ParamError)
+				}
+				return output
+			}
+			
+			public func computeKey(peerKey: NSData) throws -> NSData {
+				var sharedKeyLength = 8192
+				let sharedKey = NSMutableData(length: sharedKeyLength)!
+				let status = CCDHComputeKey!(
+					sharedKey: sharedKey.mutableBytes, sharedKeyLen: &sharedKeyLength,
+					peerPubKey: peerKey.bytes, peerPubKeyLen: peerKey.length,
+					ref: ref)
+				sharedKey.length = sharedKeyLength
+				guard status == 0 else {
+					throw CCError(.ParamError)
+				}
+				return sharedKey
+			}
+			
+			deinit {
+				if ref != nil {
+					CCDHRelease!(ref: ref)
+				}
+			}
+		}
+		
+		
+		public static func available() -> Bool {
+			return CCDHCreate != nil &&
+				CCDHRelease != nil &&
+				CCDHGenerateKey != nil &&
+				CCDHComputeKey != nil
+		}
+		
+		private typealias CCDHParameters = UnsafePointer<Void>
+		private typealias CCDHRef = UnsafePointer<Void>
+
+		private typealias kCCDHRFC3526Group5TM = UnsafePointer<CCDHParameters>
+		private static let kCCDHRFC3526Group5M : kCCDHRFC3526Group5TM? =
+			getFunc(dl, f: "kCCDHRFC3526Group5")
+		private static let kCCDHRFC3526Group5 = kCCDHRFC3526Group5M?.memory
+		
+		private typealias CCDHCreateT = @convention(c) (
+			dhParameter: CCDHParameters) -> CCDHRef
+		private static let CCDHCreate : CCDHCreateT? = getFunc(dl, f: "CCDHCreate")
+		
+		private typealias CCDHReleaseT = @convention(c) (
+			ref: CCDHRef) -> Void
+		private static let CCDHRelease : CCDHReleaseT? = getFunc(dl, f: "CCDHRelease")
+		
+		private typealias CCDHGenerateKeyT = @convention(c) (
+			ref: CCDHRef,
+			output: UnsafeMutablePointer<Void>, outputLength: UnsafeMutablePointer<size_t>) -> CInt
+		private static let CCDHGenerateKey : CCDHGenerateKeyT? = getFunc(dl, f: "CCDHGenerateKey")
+
+		private typealias CCDHComputeKeyT = @convention(c) (
+			sharedKey: UnsafeMutablePointer<Void>, sharedKeyLen: UnsafeMutablePointer<size_t>,
+			peerPubKey: UnsafePointer<Void>, peerPubKeyLen: size_t,
+			ref: CCDHRef) -> CInt
+		private static let CCDHComputeKey : CCDHComputeKeyT? = getFunc(dl, f: "CCDHComputeKey")
 	}
 	
 	public class EC {

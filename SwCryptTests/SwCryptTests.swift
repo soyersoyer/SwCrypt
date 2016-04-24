@@ -240,4 +240,23 @@ class SwCryptTest: XCTestCase {
 		let shared = try? CC.EC.computeSharedSecret(keys!.0, publicKey: keys!.1)
 		XCTAssert(shared != nil)
 	}
+	
+	func testDH() {
+		XCTAssert(CC.DH.available())
+		let dh1 = try? CC.DH.DH(dhParam: .rfc3526Group5)
+		XCTAssert(dh1 != nil)
+		let dh2 = try? CC.DH.DH(dhParam: .rfc3526Group5)
+		XCTAssert(dh2 != nil)
+		
+		let pub1 = try? dh1!.generateKey()
+		XCTAssert(pub1 != nil)
+		let pub2 = try? dh2!.generateKey()
+		XCTAssert(pub2 != nil)
+		
+		let common1 = try? dh1!.computeKey(pub2!)
+		XCTAssert(common1 != nil)
+		let common2 = try? dh2!.computeKey(pub1!)
+		XCTAssert(common2 != nil)
+		XCTAssert(common1 == common2)
+	}
 }

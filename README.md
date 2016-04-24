@@ -32,6 +32,12 @@ let signed = try? CC.EC.signHash(keys!.0, hash: hash)
 let verified = try? CC.EC.verifyHash(keys!.1, hash: hash, signedData: signed!)
 let shared = try? CC.EC.computeSharedSecret(keys!.0, publicKey: keys!.1)
 ```
+### Diffie-Hellman functions
+```
+let dh = try CC.DH.DH(dhParam: .rfc3526Group5)
+let myPubKey = try dh.generateKey()
+let commonKey = try dh.computeKey(partnerPubKey!)
+```
 ### Encrypt, decrypt data with symmetric ciphers
 ```
 try CC.crypt(.encrypt, blockMode: .CBC, algorithm: .AES, padding: .PKCS7Padding, data: data, key: aesKey, iv: iv)
