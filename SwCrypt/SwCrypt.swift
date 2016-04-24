@@ -795,6 +795,7 @@ public class SMSV {
 
 public class CC {
 
+	public typealias CCCryptorStatus = Int32;
 	public enum CCError : CCCryptorStatus, ErrorType {
 		case ParamError = -4300
 		case BufferTooSmall = -4301
@@ -839,7 +840,7 @@ public class CC {
 		return output
 	}
 	
-	
+	public typealias CCHmacAlgorithm = UInt32
 	public enum HMACAlg : CCHmacAlgorithm {
 		case SHA1, MD5, SHA256, SHA384, SHA512, SHA224
 		
@@ -864,10 +865,12 @@ public class CC {
 		return buffer
 	}
 	
+	public typealias CCOperation = UInt32
 	public enum OpMode : CCOperation{
 		case encrypt = 0, decrypt
 	}
 	
+	public typealias CCMode = UInt32
 	public enum BlockMode : CCMode {
 		case ECB = 1, CBC, CFB, CTR, F8, LRW, OFB, XTS, RC4, CFB8
 	}
@@ -876,10 +879,12 @@ public class CC {
 		case GCM = 11, CCM
 	}
 	
+	public typealias CCAlgorithm = UInt32
 	public enum Algorithm : CCAlgorithm {
 		case AES = 0, mDES, _3DES, CAST, RC4, RC2, Blowfish
 	}
 	
+	public typealias CCPadding = UInt32
 	public enum Padding : CCPadding {
 		case NoPadding = 0, PKCS7Padding
 	}
@@ -982,15 +987,9 @@ public class CC {
 	}
 	
 	private typealias CCCryptorRef = UnsafePointer<Void>
-	public typealias CCCryptorStatus = Int32;
 	private typealias CCRNGStatus = CCCryptorStatus
 	private typealias CC_LONG = UInt32
-	public typealias CCMode = UInt32
-	public typealias CCOperation = UInt32
-	public typealias CCAlgorithm = UInt32
-	public typealias CCPadding = UInt32
-	typealias CCModeOptions = UInt32
-	public typealias CCHmacAlgorithm = UInt32
+	private typealias CCModeOptions = UInt32
 	
 	private typealias CCRandomGenerateBytesT = @convention(c) (
 		bytes: UnsafeMutablePointer<Void>,
@@ -1625,18 +1624,17 @@ public class CC {
 				CCECCryptorComputeSharedSecret != nil
 		}
 		
-		public enum KeyType : CCECKeyType {
+		private enum KeyType : CCECKeyType {
 			case KeyPublic = 0, KeyPrivate
 			case BlankPublicKey = 97, BlankPrivateKey
 			case BadKey = 99
 		}
-		public typealias CCECKeyType = UInt32
+		private typealias CCECKeyType = UInt32
 		
-		
-		private  enum KeyExternalFormat : CCECKeyExternalFormat {
+		private typealias CCECKeyExternalFormat = UInt32
+		private enum KeyExternalFormat : CCECKeyExternalFormat {
 			case ImportKeyBinary = 0, ImportKeyDER
 		}
-		private typealias CCECKeyExternalFormat = UInt32
 		
 		private typealias CCECCryptorRef = UnsafePointer<Void>
 		private typealias CCECCryptorGeneratePairT = @convention(c) (
