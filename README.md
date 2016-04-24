@@ -38,10 +38,6 @@ let dh = try CC.DH.DH(dhParam: .rfc3526Group5)
 let myPubKey = try dh.generateKey()
 let commonKey = try dh.computeKey(partnerPubKey!)
 ```
-### CRC function
-```
-let output = try? CC.CRC.crc(.CRC_32, input: input)
-```
 ### Encrypt, decrypt data with symmetric ciphers
 ```
 try CC.crypt(.encrypt, blockMode: .CBC, algorithm: .AES, padding: .PKCS7Padding, data: data, key: aesKey, iv: iv)

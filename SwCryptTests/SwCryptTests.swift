@@ -264,7 +264,7 @@ class SwCryptTest: XCTestCase {
 		XCTAssert(CC.CRC.available())
 		let input = "abcdefg".dataUsingEncoding(NSUTF8StringEncoding)!
 		let expectedOutput : UInt64 = 0x312A6AA6
-		let output = try? CC.CRC.crc(.CRC_32, input: input)
+		let output = try? CC.CRC.crc(input, mode: .CRC_32)
 		XCTAssert(output != nil)
 		XCTAssert(output == expectedOutput)
 	}

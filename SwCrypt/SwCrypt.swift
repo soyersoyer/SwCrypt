@@ -1723,7 +1723,7 @@ public class CC {
 			CRC_64_ECMA_182 = 60
 		}
 		
-		public static func crc(mode: Mode, input: NSData) throws -> UInt64 {
+		public static func crc(input: NSData, mode: Mode) throws -> UInt64 {
 			var result : UInt64 = 0
 			let status = CNCRC!(
 				algorithm: mode.rawValue,
