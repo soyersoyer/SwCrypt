@@ -7,23 +7,23 @@ let (privateKey, publicKey) = try! CC.RSA.generateKeyPair(2048)
 ```
 ### Convert them to PEM format
 ```
-let privateKeyPEM = try SWPrivateKey.derToPKCS1PEM(privateKey)
-let publicKeyPEM = SwPublicKey.derToPKCS8PEM(publicKey)
+let privateKeyPEM = try SwKeyConvert.PrivateKey.derToPKCS1PEM(privateKey)
+let publicKeyPEM = SwKeyConvert.PublicKey.derToPKCS8PEM(publicKey)
 ```
 ### Or read them from strings with PEM data
 ```
-let privateKeyDER = SwPrivateKey.pemToPKCS1DER(privateKeyPEM)
-let publicKeyDER = SwPulbicKey.pemToPKCS1DER(publicKeyPEM)
+let privateKeyDER = SwKeyConvert.PrivateKey.pemToPKCS1DER(privateKeyPEM)
+let publicKeyDER = SwKeyConvert.PublicKey.pemToPKCS1DER(publicKeyPEM)
 ```
 ### Or encrypt, decrypt the private key (OpenSSL compatible)
 ```
-try SwEncryptedPrivateKey.encryptPEM(privateKeyPEM, passphrase: "longpassword", mode: .AES256CBC)
-try SwEncryptedPrivateKey.decryptPEM(privEncrypted, passphrase: "longpassword")
+try SwKeyConvert.PrivateKey.encryptPEM(privateKeyPEM, passphrase: "longpassword", mode: .AES256CBC)
+try SwKeyConvert.PrivateKey.decryptPEM(privEncrypted, passphrase: "longpassword")
 ```
 ### Encrypt, decrypt data with RSA
 ```
-try CC.RSA.encrypt(data, derKey: publicKey, padding: .OAEP, digest: .SHA1)
-try CC.RSA.decrypt(data, derKey: privateKey, padding: .OAEP, digest: .SHA1)
+try CC.RSA.encrypt(data, derKey: publicKey, tag: tag, padding: .OAEP, digest: .SHA1)
+try CC.RSA.decrypt(data, derKey: privateKey, tag: tag, padding: .OAEP, digest: .SHA1)
 ```
 ### Elliptic curve functions
 ```

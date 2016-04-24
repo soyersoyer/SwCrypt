@@ -1,14 +1,5 @@
 import Foundation
 
-enum SwError : ErrorType {
-	case Base64Decoding
-	case UTF8Decoding
-	case ASN1Parse
-	case PEMParse
-	case SEMParse
-	case SEMUnsupportedVersion
-}
-
 public class SwKeyStore {
 
 	enum SecError : OSStatus, ErrorType {
@@ -21,18 +12,17 @@ public class SwKeyStore {
 		case ItemNotFound = -25300
 		case InteractionNotAllowed = -25308
 		case Decode = -26275
-		case Unknown = -2147483648
-		init(status: OSStatus) {
-			self = SecError(rawValue: status) ?? .Unknown
+		init(_ status: OSStatus, function: String = #function, file: String = #file, line: Int = #line) {
+			self = SecError(rawValue: status)!
+			print("\(file):\(line): [\(function)] \(self._domain): \(self) (\(self.rawValue))")
 		}
-		static func check(status: OSStatus) throws {
-			guard status == errSecSuccess else {
-				throw SecError(status: status)
-			}
+		init(_ type: SecError, function: String = #function, file: String = #file, line: Int = #line) {
+			self = type
+			print("\(file):\(line): [\(function)] \(self._domain): \(self) (\(self.rawValue))")
 		}
 	}
 	
-	static public func upsertKey(pemKey: String, keyTag: String,
+	public static func upsertKey(pemKey: String, keyTag: String,
 	                             options: [NSString : AnyObject] = [:]) throws {
 		let pemKeyAsData = pemKey.dataUsingEncoding(NSUTF8StringEncoding)!
 		
@@ -52,10 +42,10 @@ public class SwKeyStore {
 			try delKey(keyTag)
 			status = SecItemAdd(parameters, nil)
 		}
-		try SecError.check(status)
+		guard status == errSecSuccess else { throw SecError(status) }
 	}
 	
-	static public func getKey(keyTag: String) throws -> String {
+	public static func getKey(keyTag: String) throws -> String {
 		let parameters: [NSString : AnyObject] = [
 			kSecClass : kSecClassKey,
 			kSecAttrKeyType : kSecAttrKeyTypeRSA,
@@ -63,84 +53,116 @@ public class SwKeyStore {
 			kSecReturnData : true
 		]
 		var data: AnyObject?
-		try SecError.check(SecItemCopyMatching(parameters, &data))
+		let status = SecItemCopyMatching(parameters, &data)
+		guard status == errSecSuccess else { throw SecError(status) }
+		
 		guard let pemKeyAsData = data as? NSData else {
-			throw SwError.UTF8Decoding
+			throw SecError(.Decode)
 		}
 		guard let result = String(data: pemKeyAsData, encoding: NSUTF8StringEncoding) else {
-			throw SwError.UTF8Decoding
+			throw SecError(.Decode)
 		}
 		return result
 	}
 	
-	static public func delKey(keyTag: String) throws {
+	public static func delKey(keyTag: String) throws {
 		let parameters: [NSString : AnyObject] = [
 			kSecClass : kSecClassKey,
 			kSecAttrApplicationTag: keyTag
 		]
-		try SecError.check(SecItemDelete(parameters))
+		let status = SecItemDelete(parameters)
+		guard status == errSecSuccess else { throw SecError(status) }
 	}
 }
 
-public class SwPrivateKey {
+public class SwKeyConvert {
 	
-	static public func pemToPKCS1DER(pemKey: String) throws -> NSData {
-		let derKey = try PEM.PrivateKey.toDER(pemKey)
-		return try PKCS8.PrivateKey.stripHeaderIfAny(derKey)
+	public enum Error : ErrorType {
+		case InvalidKey
+		case BadPassphrase
+		init(_ type: Error, function: String = #function, file: String = #file, line: Int = #line) {
+			self = type
+			print("\(file):\(line): [\(function)] \(self._domain): \(self)")
+		}
 	}
 	
-	static public func derToPKCS1PEM(derKey: NSData) -> String {
-		return PEM.PrivateKey.toPEM(derKey)
+	public class PrivateKey {
+	
+		public static func pemToPKCS1DER(pemKey: String) throws -> NSData {
+			do {
+				let derKey = try PEM.PrivateKey.toDER(pemKey)
+				return try PKCS8.PrivateKey.stripHeaderIfAny(derKey)
+			}
+			catch { throw Error(.InvalidKey) }
+		}
+		
+		public static func derToPKCS1PEM(derKey: NSData) -> String {
+			return PEM.PrivateKey.toPEM(derKey)
+		}
+		
+		public typealias EncMode = PEM.EncryptedPrivateKey.EncMode
+		
+		public static func encryptPEM(pemKey: String, passphrase: String, mode: EncMode) throws -> String {
+			do {
+				let derKey = try PEM.PrivateKey.toDER(pemKey)
+				return PEM.EncryptedPrivateKey.toPEM(derKey, passphrase: passphrase, mode: mode)
+			}
+			catch { throw Error(.InvalidKey) }
+		}
+		
+		public static func decryptPEM(pemKey: String, passphrase: String) throws -> String {
+			do {
+				let derKey = try PEM.EncryptedPrivateKey.toDER(pemKey, passphrase: passphrase)
+				return PEM.PrivateKey.toPEM(derKey)
+			}
+			catch PEM.Error.BadPassphrase { throw Error(.BadPassphrase) }
+			catch { throw Error(.InvalidKey) }
+		}
+	}
+
+	public class PublicKey {
+	
+		public static func pemToPKCS1DER(pemKey: String) throws -> NSData {
+			do {
+				let derKey = try PEM.PublicKey.toDER(pemKey)
+				return try PKCS8.PublicKey.stripHeaderIfAny(derKey)
+			}
+			catch { throw Error(.InvalidKey) }
+		}
+	
+		public static func derToPKCS1PEM(derKey: NSData) -> String {
+			return PEM.PublicKey.toPEM(derKey)
+		}
+		
+		public static func derToPKCS8PEM(derKey: NSData) -> String {
+			let pkcs8Key = PKCS8.PublicKey.addHeader(derKey)
+			return PEM.PublicKey.toPEM(pkcs8Key)
+		}
+		
 	}
 
 }
 
-public class SwPublicKey {
+public class PKCS8 {
 	
-	static public func pemToPKCS1DER(pemKey: String) throws -> NSData {
-		let derKey = try PEM.PublicKey.toDER(pemKey)
-		return try PKCS8.PublicKey.stripHeaderIfAny(derKey)
+	public enum Error : ErrorType {
+		case ASN1Parse
+		case OIDMismatch
+		init(_ type: Error, function: String = #function, file: String = #file, line: Int = #line) {
+			self = type
+			print("\(file):\(line): [\(function)] \(self._domain): \(self)")
+		}
 	}
 	
-	static public func derToPKCS1PEM(derKey: NSData) -> String {
-		return PEM.PublicKey.toPEM(derKey)
-	}
-	
-	static public func derToPKCS8PEM(derKey: NSData) -> String {
-		let pkcs8Key = PKCS8.PublicKey.addHeader(derKey)
-		return PEM.PublicKey.toPEM(pkcs8Key)
-	}
-	
-}
-
-public class SwEncryptedPrivateKey {
-	public enum Mode {
-		case AES128CBC, AES256CBC
-	}
-	
-	static public func encryptPEM(pemKey: String, passphrase: String, mode: Mode) throws -> String {
-		let derKey = try PEM.PrivateKey.toDER(pemKey)
-		return try PEM.EncryptedPrivateKey.toPEM(derKey, passphrase: passphrase, mode: mode)
-	}
-	
-	static public func decryptPEM(pemKey: String, passphrase: String) throws -> String {
-		let derKey = try PEM.EncryptedPrivateKey.toDER(pemKey, passphrase: passphrase)
-		return PEM.PrivateKey.toPEM(derKey)
-	}
-	
-}
-
-private class PKCS8 {
-	
-	private class PrivateKey {
+	public class PrivateKey {
 		
 		//https://lapo.it/asn1js/
-		static private func stripHeaderIfAny(derKey: NSData) throws -> NSData {
+		public static func stripHeaderIfAny(derKey: NSData) throws -> NSData {
 			let bytes = derKey.arrayOfBytes()
 			
 			var offset = 0
 			guard bytes[offset] == 0x30 else {
-				throw SwError.ASN1Parse
+				throw Error(.ASN1Parse)
 			}
 			offset += 1
 			
@@ -150,7 +172,7 @@ private class PKCS8 {
 			offset += 1
 			
 			guard bytes[offset] == 0x02 else {
-				throw SwError.ASN1Parse
+				throw Error(.ASN1Parse)
 			}
 			offset += 3
 			
@@ -164,12 +186,12 @@ private class PKCS8 {
 			let slice: [UInt8] = Array(bytes[offset..<(offset + OID.count)])
 			
 			guard slice == OID else {
-				throw SwError.ASN1Parse
+				throw Error(.OIDMismatch)
 			}
 			
 			offset += OID.count
 			guard bytes[offset] == 0x04 else {
-				throw SwError.ASN1Parse
+				throw Error(.ASN1Parse)
 			}
 			
 			offset += 1
@@ -179,16 +201,20 @@ private class PKCS8 {
 			offset += 1
 			
 			guard bytes[offset] == 0x30 else {
-				throw SwError.ASN1Parse
+				throw Error(.ASN1Parse)
 			}
 			
 			return derKey.subdataWithRange(NSRange(location: offset, length: derKey.length - offset))
 		}
+		
+		public static func hasCorrectHeader(derKey: NSData) -> Bool {
+			return (try? stripHeaderIfAny(derKey)) != nil
+		}
 	}
 	
-	class PublicKey {
+	public class PublicKey {
 		
-		static private func addHeader(derKey: NSData) -> NSData {
+		public static func addHeader(derKey: NSData) -> NSData {
 			let result = NSMutableData()
 			
 			let encodingLength: Int = encodedOctets(derKey.length + 1).count
@@ -220,12 +246,12 @@ private class PKCS8 {
 		}
 		
 		//https://lapo.it/asn1js/
-		static private func stripHeaderIfAny(derKey: NSData) throws -> NSData {
+		public static func stripHeaderIfAny(derKey: NSData) throws -> NSData {
 			let bytes = derKey.arrayOfBytes()
 			
 			var offset = 0
 			guard bytes[offset] == 0x30 else {
-				throw SwError.ASN1Parse
+				throw Error(.ASN1Parse)
 			}
 			
 			offset += 1
@@ -245,14 +271,14 @@ private class PKCS8 {
 			let slice: [UInt8] = Array(bytes[offset..<(offset + OID.count)])
 			
 			guard slice == OID else {
-				throw SwError.ASN1Parse
+				throw Error(.OIDMismatch)
 			}
 			
 			offset += OID.count
 			
 			// Type
 			guard bytes[offset] == 0x03 else {
-				throw SwError.ASN1Parse
+				throw Error(.ASN1Parse)
 			}
 			
 			offset += 1
@@ -264,14 +290,18 @@ private class PKCS8 {
 			
 			// Contents should be separated by a null from the header
 			guard bytes[offset] == 0x00 else {
-				throw SwError.ASN1Parse
+				throw Error(.ASN1Parse)
 			}
 			
 			offset += 1
 			return derKey.subdataWithRange(NSRange(location: offset, length: derKey.length - offset))
 		}
 		
-		static private func encodedOctets(int: Int) -> [UInt8] {
+		public static func hasCorrectHeader(derKey: NSData) -> Bool {
+			return (try? stripHeaderIfAny(derKey)) != nil
+		}
+		
+		private static func encodedOctets(int: Int) -> [UInt8] {
 			// Short form
 			if int < 128 {
 				return [UInt8(int)];
@@ -292,203 +322,237 @@ private class PKCS8 {
 	}
 }
 
-private class PEM {
+public class PEM {
 	
-	private class PrivateKey {
+	public enum Error : ErrorType {
+		case HeaderParse
+		case Base64Decode
+		case EncModeParse
+		case IVParse
+		case BadPassphrase
+		init(_ type: Error, function: String = #function, file: String = #file, line: Int = #line) {
+			self = type
+			print("\(file):\(line): [\(function)] \(self._domain): \(self)")
+		}
+	}
+	
+	public class PrivateKey {
 		
-		static private func toDER(pemKey: String) throws -> NSData {
-			let strippedKey = try stripHeader(pemKey)
-			guard let data = NSData(base64EncodedString: strippedKey, options: [.IgnoreUnknownCharacters]) else {
-				throw SwError.Base64Decoding
+		public static func toDER(pemKey: String) throws -> NSData {
+			guard let strippedKey = stripHeader(pemKey) else {
+				throw Error(.HeaderParse)
+			}
+			guard let data = PEM.base64Decode(strippedKey) else {
+				throw Error(.Base64Decode)
 			}
 			return data
 		}
 		
-		static private func toPEM(derKey: NSData) -> String {
+		public static func toPEM(derKey: NSData) -> String {
 			let base64 = derKey.base64EncodedStringWithOptions(
 				[.Encoding64CharacterLineLength,.EncodingEndLineWithLineFeed])
 			return addRSAHeader(base64)
 		}
 		
-		static private let Prefix = "-----BEGIN PRIVATE KEY-----\n"
-		static private let Suffix = "\n-----END PRIVATE KEY-----"
-		static private let RSAPrefix = "-----BEGIN RSA PRIVATE KEY-----\n"
-		static private let RSASuffix = "\n-----END RSA PRIVATE KEY-----"
+		private static let Prefix = "-----BEGIN PRIVATE KEY-----\n"
+		private static let Suffix = "\n-----END PRIVATE KEY-----"
+		private static let RSAPrefix = "-----BEGIN RSA PRIVATE KEY-----\n"
+		private static let RSASuffix = "\n-----END RSA PRIVATE KEY-----"
 		
-		static private func addHeader(base64: String) -> String {
+		private static func addHeader(base64: String) -> String {
 			return Prefix + base64 + Suffix
 		}
 		
-		static private func addRSAHeader(base64: String) -> String {
+		private static func addRSAHeader(base64: String) -> String {
 			return RSAPrefix + base64 + RSASuffix
 		}
 		
-		static private func stripHeader(pemKey: String) throws -> String {
-			if pemKey.hasPrefix(Prefix) {
-				guard let r = pemKey.rangeOfString(Suffix) else {
-					throw SwError.PEMParse
-				}
-				return pemKey.substringWithRange(Prefix.endIndex..<r.startIndex)
-			}
-			if pemKey.hasPrefix(RSAPrefix) {
-				guard let r = pemKey.rangeOfString(RSASuffix) else {
-					throw SwError.PEMParse
-				}
-				return pemKey.substringWithRange(RSAPrefix.endIndex..<r.startIndex)
-			}
-			throw SwError.PEMParse
+		private static func stripHeader(pemKey: String) -> String? {
+			return PEM.stripHeaderFooter(pemKey, header: Prefix, footer: Suffix) ??
+				PEM.stripHeaderFooter(pemKey, header: RSAPrefix, footer: RSASuffix)
 		}
 	}
 	
-	private class PublicKey {
+	public class PublicKey {
 		
-		static private func toDER(pemKey: String) throws -> NSData {
-			let strippedKey = try stripHeader(pemKey)
-			guard let data = NSData(base64EncodedString: strippedKey,
-			                        options: [.IgnoreUnknownCharacters]) else {
-										throw SwError.Base64Decoding
+		public static func toDER(pemKey: String) throws -> NSData {
+			guard let strippedKey = stripHeader(pemKey) else {
+				throw Error(.HeaderParse)
+			}
+			guard let data = PEM.base64Decode(strippedKey) else {
+				throw Error(.Base64Decode)
 			}
 			return data
 		}
 		
-		static private func toPEM(derKey: NSData) -> String {
+		public static func toPEM(derKey: NSData) -> String {
 			let base64 = derKey.base64EncodedStringWithOptions(
 				[.Encoding64CharacterLineLength,.EncodingEndLineWithLineFeed])
 			return addHeader(base64)
 		}
 		
-		static private let PEMPrefix = "-----BEGIN PUBLIC KEY-----\n"
-		static private let PEMSuffix = "\n-----END PUBLIC KEY-----"
+		private static let PEMPrefix = "-----BEGIN PUBLIC KEY-----\n"
+		private static let PEMSuffix = "\n-----END PUBLIC KEY-----"
 		
-		static private func addHeader(base64: String) -> String {
+		private static func addHeader(base64: String) -> String {
 			return PEMPrefix + base64 + PEMSuffix
 		}
 		
-		static private func stripHeader(pemKey: String) throws -> String {
-			guard pemKey.hasPrefix(PEMPrefix) else {
-				throw SwError.PEMParse
-			}
-			guard let r = pemKey.rangeOfString(PEMSuffix) else {
-				throw SwError.PEMParse
-			}
-			return pemKey.substringWithRange(PEMPrefix.endIndex..<r.startIndex)
+		private static func stripHeader(pemKey: String) -> String? {
+			return PEM.stripHeaderFooter(pemKey, header: PEMPrefix, footer: PEMSuffix)
 		}
 	}
 	
-	private class EncryptedPrivateKey {
-		typealias Mode = SwEncryptedPrivateKey.Mode
-		
-		static private func toDER(pemKey: String, passphrase: String) throws -> NSData {
-			let strippedKey = try PEM.PrivateKey.stripHeader(pemKey)
-			return try decryptPEM(strippedKey, passphrase: passphrase)
+	public class EncryptedPrivateKey {
+
+		public enum EncMode {
+			case AES128CBC, AES256CBC
 		}
 		
-		static private func toPEM(derKey: NSData, passphrase: String, mode: Mode) throws -> String {
-			let encryptedDERKey = try encryptDERKey(derKey, passphrase: passphrase, mode: mode)
-			return PEM.PrivateKey.addRSAHeader(encryptedDERKey)
-		}
-		
-		static private let AES128CBCInfo = "Proc-Type: 4,ENCRYPTED\nDEK-Info: AES-128-CBC,"
-		static private let AES256CBCInfo = "Proc-Type: 4,ENCRYPTED\nDEK-Info: AES-256-CBC,"
-		static private let AESInfoLength = AES128CBCInfo.characters.count
-		static private let AESIVInHexLength = 32
-		static private let AESHeaderLength = AESInfoLength + AESIVInHexLength
-		
-		static private func encryptDERKeyAES128CBC(derKey: NSData, passphrase: String) throws -> String {
-			let iv = try CC.generateRandom(16)
-			let aesKey = getAES128Key(passphrase, iv: iv)
-			let encrypted = try CC.crypt(.encrypt, blockMode: .CBC, algorithm: .AES, padding: .PKCS7Padding, data: derKey, key: aesKey, iv: iv)
-			return AES128CBCInfo + iv.hexadecimalString() + "\n\n" +
-				encrypted.base64EncodedStringWithOptions(
-					[.Encoding64CharacterLineLength,.EncodingEndLineWithLineFeed])
-		}
-		
-		static private func encryptDERKeyAES256CBC(derKey: NSData, passphrase: String) throws -> String {
-			let iv = try CC.generateRandom(16)
-			let aesKey = getAES256Key(passphrase, iv: iv)
-			let encrypted = try CC.crypt(.encrypt, blockMode: .CBC, algorithm: .AES, padding: .PKCS7Padding, data: derKey, key: aesKey, iv: iv)
-			return AES256CBCInfo + iv.hexadecimalString() + "\n\n" +
-				encrypted.base64EncodedStringWithOptions(
-					[.Encoding64CharacterLineLength,.EncodingEndLineWithLineFeed])
-		}
-		
-		static private func encryptDERKey(derKey: NSData, passphrase: String, mode: Mode) throws -> String {
-			switch mode {
-			case .AES128CBC: return try encryptDERKeyAES128CBC(derKey, passphrase: passphrase)
-			case .AES256CBC: return try encryptDERKeyAES256CBC(derKey, passphrase: passphrase)
+		public static func toDER(pemKey: String, passphrase: String) throws -> NSData {
+			guard let strippedKey = PrivateKey.stripHeader(pemKey) else {
+				throw Error(.HeaderParse)
 			}
-		}
-		
-		static private func decryptPEM(strippedKey: String, passphrase: String) throws -> NSData {
-			let iv = try getIV(strippedKey)
-			let aesKey = try getAESKey(strippedKey, passphrase: passphrase, iv: iv)
-			let base64Data = strippedKey.substringFromIndex(strippedKey.startIndex+AESHeaderLength)
-			guard let data = NSData(base64EncodedString: base64Data,
-			                        options: [.IgnoreUnknownCharacters]) else {
-										throw SwError.Base64Decoding
+			guard let mode = getEncMode(strippedKey) else {
+				throw Error(.EncModeParse)
 			}
-			let decrypted = try CC.crypt(.decrypt, blockMode: .CBC, algorithm: .AES, padding: .PKCS7Padding, data: data, key: aesKey, iv: iv)
+			guard let iv = getIV(strippedKey) else {
+				throw Error(.IVParse)
+			}
+			let aesKey = getAESKey(mode, passphrase: passphrase, iv: iv)
+			let base64Data = strippedKey.substringFromIndex(strippedKey.startIndex + AESHeaderLength)
+			guard let data = PEM.base64Decode(base64Data) else {
+				throw Error(.Base64Decode)
+			}
+			guard let decrypted = decryptKey(data, key: aesKey, iv: iv) else {
+				throw Error(.BadPassphrase)
+			}
+			guard PKCS8.PrivateKey.hasCorrectHeader(decrypted) else {
+				throw Error(.BadPassphrase)
+			}
 			return decrypted
 		}
 		
-		static private func getIV(strippedKey: String) throws -> NSData {
-			let ivInHex = strippedKey.substringWithRange(strippedKey.startIndex+AESInfoLength..<strippedKey.startIndex+AESHeaderLength)
-			guard let iv = ivInHex.dataFromHexadecimalString() else {
-				throw SwError.PEMParse
-			}
-			return iv
+		public static func toPEM(derKey: NSData, passphrase: String, mode: EncMode) -> String {
+			let iv = CC.generateRandom(16)
+			let aesKey = getAESKey(mode, passphrase: passphrase, iv: iv)
+			let encrypted = encryptKey(derKey, key: aesKey, iv: iv)
+			let encryptedDERKey = addEncryptHeader(encrypted, iv: iv, mode: mode)
+			return PrivateKey.addRSAHeader(encryptedDERKey)
 		}
 		
-		static private func getAESKey(strippedKey: String, passphrase: String, iv: NSData) throws -> NSData {
+		private static let AES128CBCInfo = "Proc-Type: 4,ENCRYPTED\nDEK-Info: AES-128-CBC,"
+		private static let AES256CBCInfo = "Proc-Type: 4,ENCRYPTED\nDEK-Info: AES-256-CBC,"
+		private static let AESInfoLength = AES128CBCInfo.characters.count
+		private static let AESIVInHexLength = 32
+		private static let AESHeaderLength = AESInfoLength + AESIVInHexLength
+	
+		private static func addEncryptHeader(key: NSData, iv: NSData, mode: EncMode) -> String {
+			return getHeader(mode) + iv.hexadecimalString() + "\n\n" +
+				key.base64EncodedStringWithOptions(
+					[.Encoding64CharacterLineLength,.EncodingEndLineWithLineFeed])
+		}
+		
+		private static func getHeader(mode: EncMode) -> String {
+			switch mode {
+			case .AES128CBC: return AES128CBCInfo
+			case .AES256CBC: return AES256CBCInfo
+			}
+		}
+		
+		private static func getEncMode(strippedKey: String) -> EncMode? {
 			if strippedKey.hasPrefix(AES128CBCInfo) {
-				return getAES128Key(passphrase, iv: iv)
+				return .AES128CBC
 			}
 			if strippedKey.hasPrefix(AES256CBCInfo) {
-				return getAES256Key(passphrase, iv: iv)
+				return .AES256CBC
 			}
-			throw SwError.PEMParse
+			return nil
 		}
 		
-		static private func getAES128Key(passphrase: String, iv: NSData) -> NSData {
+		private static func getIV(strippedKey: String) -> NSData? {
+			let ivInHex = strippedKey.substringWithRange(strippedKey.startIndex+AESInfoLength..<strippedKey.startIndex+AESHeaderLength)
+			return  ivInHex.dataFromHexadecimalString()
+		}
+		
+		private static func getAESKey(mode: EncMode, passphrase: String, iv: NSData) -> NSData {
+			switch(mode) {
+			case .AES128CBC: return getAES128Key(passphrase, iv: iv)
+			case .AES256CBC: return getAES256Key(passphrase, iv: iv)
+			}
+		}
+		
+		private static func getAES128Key(passphrase: String, iv: NSData) -> NSData {
 			//128bit_Key = MD5(Passphrase + Salt)
 			let pass = passphrase.dataUsingEncoding(NSUTF8StringEncoding)!
 			let salt = iv.subdataWithRange(NSRange(location: 0, length: 8))
 			
-			let key = NSMutableData()
-			key.appendData(pass)
+			let key = NSMutableData(data: pass)
 			key.appendData(salt)
 			return CC.digest(key, alg: .MD5)
 		}
 		
-		static private func getAES256Key(passphrase: String, iv: NSData) -> NSData {
+		private static func getAES256Key(passphrase: String, iv: NSData) -> NSData {
 			//128bit_Key = MD5(Passphrase + Salt)
 			//256bit_Key = 128bit_Key + MD5(128bit_Key + Passphrase + Salt)
 			let pass = passphrase.dataUsingEncoding(NSUTF8StringEncoding)!
 			let salt = iv.subdataWithRange(NSRange(location: 0, length: 8))
 			
-			let first = NSMutableData()
-			first.appendData(pass)
+			let first = NSMutableData(data: pass)
 			first.appendData(salt)
 			let aes128Key = CC.digest(first, alg: .MD5)
 			
-			let sec = NSMutableData()
-			sec.appendData(aes128Key)
+			let sec = NSMutableData(data: aes128Key)
 			sec.appendData(pass)
 			sec.appendData(salt)
 			
-			let aes256Key = NSMutableData()
-			aes256Key.appendData(aes128Key)
+			let aes256Key = NSMutableData(data: aes128Key)
 			aes256Key.appendData(CC.digest(sec, alg: .MD5))
 			return aes256Key
 		}
 		
+		private static func encryptKey(data: NSData, key: NSData, iv:NSData) -> NSData {
+			return try! CC.crypt(
+				.encrypt, blockMode: .CBC, algorithm: .AES, padding: .PKCS7Padding,
+				data: data, key: key, iv: iv)
+		}
+		
+		private static func decryptKey(data: NSData, key: NSData, iv: NSData) -> NSData? {
+			return try? CC.crypt(.decrypt, blockMode: .CBC, algorithm: .AES, padding: .PKCS7Padding,
+			                     data: data, key: key, iv: iv)
+		}
+		
+	}
+	
+	private static func stripHeaderFooter(data: String, header: String, footer: String) -> String? {
+		guard data.hasPrefix(header) else {
+			return nil
+		}
+		guard let r = data.rangeOfString(footer) else {
+			return nil
+		}
+		return data.substringWithRange(header.endIndex..<r.startIndex)
+	}
+	
+	private static func base64Decode(base64Data: String) -> NSData? {
+		return NSData(base64EncodedString: base64Data, options: [.IgnoreUnknownCharacters])
 	}
 	
 }
 
-
 //Simple Encrypted Message
 public class SEM {
+	
+	public enum Error : ErrorType {
+		case Parse
+		case UnsupportedVersion
+		case InvalidKey
+		case Decode
+		init(_ type: Error, function: String = #function, file: String = #file, line: Int = #line) {
+			self = type
+			print("\(file):\(line): [\(function)] \(self._domain): \(self)")
+		}
+	}
 	
 	public enum AESMode : UInt8 {
 		case AES128, AES192, AES256
@@ -527,33 +591,31 @@ public class SEM {
 		}
 	}
 	
-	static public func encryptMessage(message: String, pemKey: String, mode: Mode) throws -> String {
+	public static func encryptMessage(message: String, pemKey: String, mode: Mode) throws -> String {
 		let data = message.dataUsingEncoding(NSUTF8StringEncoding)!
 		let encryptedData = try encryptData(data, pemKey: pemKey, mode: mode)
 		return encryptedData.base64EncodedStringWithOptions([])
 	}
 	
-	static public func decryptMessage(message: String, pemKey: String) throws -> String {
+	public static func decryptMessage(message: String, pemKey: String) throws -> String {
 		guard let data = NSData(base64EncodedString: message, options: []) else {
-			throw SwError.Base64Decoding
+			throw Error(.Parse)
 		}
 		let decryptedData = try decryptData(data, pemKey: pemKey)
 		guard let decryptedString = String(data: decryptedData, encoding: NSUTF8StringEncoding) else {
-			throw SwError.UTF8Decoding
+			throw Error(.Parse)
 		}
 		return decryptedString
 	}
 	
-	static public func encryptData(data: NSData, pemKey: String, mode: Mode) throws -> NSData {
-		let aesKey = try CC.generateRandom(mode.aes.keySize)
-		let iv = try CC.generateRandom(mode.block.ivSize)
+	public static func encryptData(data: NSData, pemKey: String, mode: Mode) throws -> NSData {
+		let aesKey = CC.generateRandom(mode.aes.keySize)
+		let iv = CC.generateRandom(mode.block.ivSize)
 		let header = getMessageHeader(mode, aesKey: aesKey, iv: iv)
-		let derKey = try SwPublicKey.pemToPKCS1DER(pemKey)
+		let derKey = try publicPEMToDER(pemKey)
 		
-		let encryptedHeader = try CC.RSA.encrypt(header, derKey: derKey, padding: .OAEP, digest: .SHA1)
-		let encryptedData = try cryptAuth(.encrypt, blockMode: mode.block,
-			                   data: data, aData: encryptedHeader,
-			                   key: aesKey, iv: iv)
+		let encryptedHeader = encryptHeader(header, derKey: derKey)
+		let encryptedData = try! cryptAuth(.encrypt, blockMode: mode.block, data: data, aData: encryptedHeader, key: aesKey, iv: iv)
 		
 		let result = NSMutableData(data: encryptedHeader)
 		result.appendData(encryptedData)
@@ -561,38 +623,54 @@ public class SEM {
 	}
 	
 	
-	static public func decryptData(data: NSData, pemKey: String) throws -> NSData {
-		let derKey = try SwPrivateKey.pemToPKCS1DER(pemKey)
-		let (header, tail) =  try CC.RSA.decrypt(data, derKey: derKey, padding: .OAEP, digest: .SHA1)
+	public static func decryptData(data: NSData, pemKey: String) throws -> NSData {
+		let derKey = try privatePEMToDER(pemKey)
+		let (header, tail) =  try decryptHeader(data, derKey: derKey)
 		let (mode, aesKey, iv) = try parseMessageHeader(header)
 		
-		let encryptedHeader = data.subdataWithRange(NSRange(location:0, length: data.length - tail.length))
+		let encryptedHeader = data.subdataWithRange(
+			NSRange(location:0, length: data.length - tail.length))
 		let encryptedData = tail
 		return try cryptAuth(.decrypt, blockMode: mode.block, data: encryptedData, aData: encryptedHeader, key: aesKey, iv: iv)
 	}
 	
-	static private func cryptAuth(opMode: CC.OpMode, blockMode: BlockMode,
-	                              data: NSData, aData: NSData,
-	                              key: NSData, iv: NSData) throws -> NSData {
-		
-		if blockMode == .CBC_SHA256 {
-			return try cryptAuth(opMode, blockMode: .CBC, hmacAlg: .SHA256,
-			                     data: data, aData: aData, key: key, iv:iv)
-		}
-		else /* GCM */ {
-			return try CC.cryptAuth(opMode, blockMode: .GCM, algorithm: .AES,
-			                        data: data, aData: aData,
-			                        key: key, iv: iv, tagLength: 16)
-		}
+	private static func encryptHeader(data: NSData, derKey: NSData) -> NSData {
+		return try! CC.RSA.encrypt(data, derKey: derKey, tag: NSData(), padding: .OAEP, digest: .SHA1)
 	}
 	
-	static private func cryptAuth(opMode: CC.OpMode, blockMode: CC.BlockMode,
-	                              hmacAlg: CC.HMACAlg,
-	                              data: NSData, aData: NSData,
-	                              key: NSData, iv:NSData) throws -> NSData {
+	private static func decryptHeader(data: NSData, derKey: NSData) throws -> (NSData, NSData) {
+		do {
+			let (header, blockSize) = try CC.RSA.decrypt(data, derKey: derKey,
+			                                             tag: NSData(), padding: .OAEP, digest: .SHA1)
+			
+			let tail = data.subdataWithRange(NSRange(location: blockSize, length: data.length - blockSize))
+			
+			return (header, tail)
+		}
+		catch _ as CC.CCError { throw Error(.Decode) }
+	}
+	
+	private static func cryptAuth(opMode: CC.OpMode, blockMode: BlockMode, data: NSData, aData: NSData,
+	                      key: NSData, iv: NSData) throws -> NSData {
+		do {
+			if blockMode == .CBC_SHA256 {
+				return try cryptAuth(opMode, blockMode: .CBC, hmacAlg: .SHA256,
+				                     data: data, aData: aData, key: key, iv:iv)
+			}
+			else /* GCM */ {
+				return try CC.cryptAuth(opMode, blockMode: .GCM, algorithm: .AES,
+				                        data: data, aData: aData,
+				                        key: key, iv: iv, tagLength: 16)
+			}
+		}
+		catch _ as CC.CCError { throw Error(.Decode) }
+	}
+	
+	private static func cryptAuth(opMode: CC.OpMode, blockMode: CC.BlockMode, hmacAlg: CC.HMACAlg,
+	                      data: NSData, aData: NSData, key: NSData, iv:NSData) throws -> NSData {
 		if opMode == .encrypt {
 			//encrypt then mac
-			let encryptedData = try CC.crypt(.encrypt, blockMode: blockMode,
+			let encryptedData = try! CC.crypt(.encrypt, blockMode: blockMode,
 			                                 algorithm: .AES, padding: .PKCS7Padding,
 			                                 data: data, key: key, iv: iv)
 			let macData = NSMutableData(data: aData)
@@ -610,7 +688,7 @@ public class SEM {
 			let hmac = data.subdataWithRange(NSRange(location: data.length - hmacAlg.digestLength, length: hmacAlg.digestLength))
 			
 			guard CC.HMAC(macData, alg: hmacAlg, key: key) == hmac else {
-				throw CC.CCError.DecodeError
+				throw CC.CCError(.DecodeError)
 			}
 			return try CC.crypt(.decrypt, blockMode: blockMode,
 			                                 algorithm: .AES, padding: .PKCS7Padding,
@@ -618,7 +696,7 @@ public class SEM {
 		}
 	}
 	
-	static private func getMessageHeader(mode: Mode, aesKey: NSData, iv: NSData) -> NSData {
+	private static func getMessageHeader(mode: Mode, aesKey: NSData, iv: NSData) -> NSData {
 		let header : [UInt8] = [mode.version, mode.aes.rawValue, mode.block.rawValue]
 		let message = NSMutableData(bytes: header, length: 3)
 		message.appendData(aesKey)
@@ -626,63 +704,92 @@ public class SEM {
 		return message
 	}
 	
-	static private func parseMessageHeader(header: NSData) throws -> (Mode, NSData, NSData) {
+	private static func parseMessageHeader(header: NSData) throws -> (Mode, NSData, NSData) {
 		guard header.length > 3 else {
-			throw SwError.SEMParse
+			throw Error(.Parse)
 		}
 		let bytes = header.arrayOfBytes()
 		let version = bytes[0]
 		guard version == 0 else {
-			throw SwError.SEMUnsupportedVersion
+			throw Error(.UnsupportedVersion)
 		}
 		guard let aes = AESMode(rawValue: bytes[1]) else {
-			throw SwError.SEMParse
+			throw Error(.Parse)
 		}
 		guard let block = BlockMode(rawValue: bytes[2]) else {
-			throw SwError.SEMParse
+			throw Error(.Parse)
 		}
 		let keySize = aes.keySize
 		let ivSize = block.ivSize
 		guard header.length == 3 + keySize + ivSize else {
-			throw SwError.SEMParse
+			throw Error(.Parse)
 		}
 		let key = header.subdataWithRange(NSRange(location: 3, length: keySize))
 		let iv = header.subdataWithRange(NSRange(location: 3 + keySize, length: ivSize))
 		
 		return (Mode(aes: aes, block: block), key, iv)
-	}	
+	}
+	
+	private static func privatePEMToDER(pemKey: String) throws -> NSData {
+		do { return try SwKeyConvert.PrivateKey.pemToPKCS1DER(pemKey) }
+		catch { throw Error(.InvalidKey) }
+	}
+	
+	private static func publicPEMToDER(pemKey: String) throws -> NSData {
+		do { return try SwKeyConvert.PublicKey.pemToPKCS1DER(pemKey) }
+		catch { throw Error(.InvalidKey) }
+	}
+	
 }
 
 //Simple Message Sign and Verify
 public class SMSV {
 	
-	static public func sign(message: String, pemKey: String) throws -> String {
+	public enum Error : ErrorType {
+		case InvalidKey
+		case ParseMessage
+		init(_ type: Error, function: String = #function, file: String = #file, line: Int = #line) {
+			self = type
+			print("\(file):\(line): [\(function)] \(self._domain): \(self)")
+		}
+	}
+	
+	public static func sign(message: String, pemKey: String) throws -> String {
 		let data = message.dataUsingEncoding(NSUTF8StringEncoding)!
 		let signedData = try signData(data, pemKey: pemKey)
 		return signedData.base64EncodedStringWithOptions([])
 	}
 	
-	static public func signData(data: NSData, pemKey: String) throws -> NSData {
-		let derKey = try SwPrivateKey.pemToPKCS1DER(pemKey)
+	public static func signData(data: NSData, pemKey: String) throws -> NSData {
+		let derKey = try privatePEMToDER(pemKey)
 		let hash = CC.digest(data, alg: .SHA512)
-		let signedData = try CC.RSA.sign(hash, derKey: derKey, padding: .OAEP, digest: .SHA512)
-		return signedData
+		return try! CC.RSA.sign(hash, derKey: derKey, padding: .OAEP, digest: .SHA512)
 	}
 	
-	static public func verify(message: String, pemKey: String, sign: String) throws -> Bool {
+	public static func verify(message: String, pemKey: String, sign: String) throws -> Bool {
 		let data = message.dataUsingEncoding(NSUTF8StringEncoding)!
 		guard let signData = NSData(base64EncodedString: sign, options: []) else {
-			throw SwError.Base64Decoding
+			throw Error(.ParseMessage)
 		}
 		return try verifyData(data, pemKey: pemKey, signData: signData)
 	}
 	
-	static public func verifyData(data: NSData, pemKey: String, signData: NSData) throws -> Bool {
-		let derKey = try SwPublicKey.pemToPKCS1DER(pemKey)
+	public static func verifyData(data: NSData, pemKey: String, signData: NSData) throws -> Bool {
+		let derKey = try publicPEMToDER(pemKey)
 		let hash = CC.digest(data, alg: .SHA512)
-		return try CC.RSA.verify(hash, derKey: derKey, padding: .OAEP, digest: .SHA512, signedData: signData)
+		return try! CC.RSA.verify(
+			hash, derKey: derKey, padding: .OAEP, digest: .SHA512, signedData: signData)
 	}
 	
+	private static func privatePEMToDER(pemKey: String) throws -> NSData {
+		do { return try SwKeyConvert.PrivateKey.pemToPKCS1DER(pemKey) }
+		catch { throw Error(.InvalidKey) }
+	}
+	
+	private static func publicPEMToDER(pemKey: String) throws -> NSData {
+		do { return try SwKeyConvert.PublicKey.pemToPKCS1DER(pemKey) }
+		catch { throw Error(.InvalidKey) }
+	}
 }
 
 
@@ -697,23 +804,20 @@ public class CC {
 		case Unimplemented = -4305
 		case Overflow = -4306
 		case RNGFailure = -4307
-		case Unknown = -2147483648
-		init(status: CCCryptorStatus, function: String, file: String, line: Int) {
-			self = CCError(rawValue: status) ?? .Unknown
-			print("\(file):\(line): CCError: \(self) \(status) \(function)")
+		init(_ status: CCCryptorStatus, function: String = #function,
+		       file: String = #file, line: Int = #line) {
+			self = CCError(rawValue: status)!
+			print("\(file):\(line): [\(function)] \(self._domain): \(self) (\(self.rawValue))")
 		}
-		static func check(status: CCCryptorStatus,
-		                  function: String = #function,
-		                  file: String = #file, line: Int = #line) throws {
-			guard status == noErr else {
-				throw CCError(status: status, function: function, file: file, line: line)
-			}
+		init(_ type: CCError, function: String = #function, file: String = #file, line: Int = #line) {
+			self = type
+			print("\(file):\(line): [\(function)] \(self._domain): \(self) (\(self.rawValue))")
 		}
 	}
 	
-	static public func generateRandom(size: Int) throws -> NSData {
+	public static func generateRandom(size: Int) -> NSData {
 		let data = NSMutableData(length: size)!
-		try CCError.check(CCRandomGenerateBytes!(bytes: data.mutableBytes, count: size))
+		CCRandomGenerateBytes!(bytes: data.mutableBytes, count: size)
 		return data
 	}
 	
@@ -726,7 +830,7 @@ public class CC {
 		case SHA224 = 9, SHA256 = 10, SHA384 = 11, SHA512 = 12
 	}
 	
-	static public func digest(data: NSData, alg: DigestAlgorithm) -> NSData {
+	public static func digest(data: NSData, alg: DigestAlgorithm) -> NSData {
 		let output = NSMutableData(length: CCDigestGetOutputSize!(algorithm: alg.rawValue))!
 		CCDigest!(algorithm: alg.rawValue,
 		          data: data.bytes,
@@ -751,7 +855,7 @@ public class CC {
 		}
 	}
 
-	static public func HMAC(data: NSData, alg: HMACAlg, key: NSData) -> NSData {
+	public static func HMAC(data: NSData, alg: HMACAlg, key: NSData) -> NSData {
 		let buffer = NSMutableData(length: alg.digestLength)!
 		CCHmac!(algorithm: alg.rawValue,
 		       key: key.bytes, keyLength: key.length,
@@ -780,33 +884,39 @@ public class CC {
 		case NoPadding = 0, PKCS7Padding
 	}
 	
-	static public func crypt(opMode: OpMode, blockMode: BlockMode,
+	public static func crypt(opMode: OpMode, blockMode: BlockMode,
 	                            algorithm: Algorithm, padding: Padding,
 	                            data: NSData, key: NSData, iv: NSData) throws -> NSData {
 		var cryptor : CCCryptorRef = nil
-		try CCError.check(CCCryptorCreateWithMode!(
+		var status = CCCryptorCreateWithMode!(
 			op: opMode.rawValue, mode: blockMode.rawValue,
 			alg: algorithm.rawValue, padding: padding.rawValue,
 			iv: iv.bytes, key: key.bytes, keyLength: key.length,
 			tweak: nil, tweakLength: 0, numRounds: 0,
-			options: CCModeOptions(), cryptorRef: &cryptor))
+			options: CCModeOptions(), cryptorRef: &cryptor)
+		guard status == noErr else { throw CCError(status) }
+
 		defer { CCCryptorRelease!(cryptorRef: cryptor) }
 		
 		let needed = CCCryptorGetOutputLength!(cryptorRef: cryptor, inputLength: data.length, final: true)
 		let result = NSMutableData(length: needed)!
 		var updateLen: size_t = 0
-		try CCError.check(CCCryptorUpdate!(
+		status = CCCryptorUpdate!(
 			cryptorRef: cryptor,
 			dataIn: data.bytes, dataInLength: data.length,
 			dataOut: result.mutableBytes, dataOutAvailable: result.length,
-			dataOutMoved: &updateLen))
+			dataOutMoved: &updateLen)
+		guard status == noErr else { throw CCError(status) }
+
 		
 		var finalLen: size_t = 0
-		try CCError.check(CCCryptorFinal!(
+		status = CCCryptorFinal!(
 			cryptorRef: cryptor,
 			dataOut: result.mutableBytes + updateLen,
 			dataOutAvailable: result.length - updateLen,
-			dataOutMoved: &finalLen))
+			dataOutMoved: &finalLen)
+		guard status == noErr else { throw CCError(status) }
+
 		
 		result.length = updateLen + finalLen
 		return result
@@ -814,7 +924,7 @@ public class CC {
 	
 	//The same behaviour as in the CCM pdf
 	//http://csrc.nist.gov/publications/nistpubs/800-38C/SP800-38C_updated-July20_2007.pdf
-	static public func cryptAuth(opMode: OpMode, blockMode: AuthBlockMode, algorithm: Algorithm,
+	public static func cryptAuth(opMode: OpMode, blockMode: AuthBlockMode, algorithm: Algorithm,
 	                             data: NSData, aData: NSData,
 	                             key: NSData, iv: NSData, tagLength: Int) throws -> NSData {
 		let cryptFun = blockMode == .GCM ? GCM.crypt : CCM.crypt
@@ -830,7 +940,7 @@ public class CC {
 				NSRange(location:data.length - tagLength, length: tagLength))
 			let (plain, vTag) = try cryptFun(opMode, algorithm: algorithm, data: cipher, key: key, iv: iv, aData: aData, tagLength: tagLength)
 			guard tag == vTag else {
-				throw CCError.DecodeError
+				throw CCError(.DecodeError)
 			}
 			return plain
 		}
@@ -870,10 +980,10 @@ public class CC {
 			CCM.available()
 	}
 	
-	typealias CCCryptorRef = UnsafePointer<Void>
+	private typealias CCCryptorRef = UnsafePointer<Void>
 	public typealias CCCryptorStatus = Int32;
-	typealias CCRNGStatus = CCCryptorStatus
-	typealias CC_LONG = UInt32
+	private typealias CCRNGStatus = CCCryptorStatus
+	private typealias CC_LONG = UInt32
 	public typealias CCMode = UInt32
 	public typealias CCOperation = UInt32
 	public typealias CCAlgorithm = UInt32
@@ -881,25 +991,25 @@ public class CC {
 	typealias CCModeOptions = UInt32
 	public typealias CCHmacAlgorithm = UInt32
 	
-	typealias CCRandomGenerateBytesT = @convention(c) (
+	private typealias CCRandomGenerateBytesT = @convention(c) (
 		bytes: UnsafeMutablePointer<Void>,
-		count: Int) -> CCRNGStatus
-	typealias CCDigestGetOutputSizeT = @convention(c) (
+		count: size_t) -> CCRNGStatus
+	private typealias CCDigestGetOutputSizeT = @convention(c) (
 		algorithm: CCDigestAlgorithm) -> size_t
-	typealias CCDigestT = @convention(c) (
+	private typealias CCDigestT = @convention(c) (
 		algorithm: CCDigestAlgorithm,
 		data: UnsafePointer<Void>,
 		dataLen: size_t,
 		output: UnsafeMutablePointer<Void>) -> CInt
 
-	typealias CCHmacT = @convention(c) (
+	private typealias CCHmacT = @convention(c) (
 		algorithm: CCHmacAlgorithm,
 		key: UnsafePointer<Void>,
 		keyLength: Int,
 		data: UnsafePointer<Void>,
 		dataLength: Int,
 		macOut: UnsafeMutablePointer<Void>) -> Void
-	typealias CCCryptorCreateWithModeT = @convention(c)(
+	private typealias CCCryptorCreateWithModeT = @convention(c)(
 		op: CCOperation,
 		mode: CCMode,
 		alg: CCAlgorithm,
@@ -909,131 +1019,147 @@ public class CC {
 		tweak: UnsafePointer<Void>, tweakLength: Int,
 		numRounds: Int32, options: CCModeOptions,
 		cryptorRef: UnsafeMutablePointer<CCCryptorRef>) -> CCCryptorStatus
-	typealias CCCryptorGetOutputLengthT = @convention(c)(
+	private typealias CCCryptorGetOutputLengthT = @convention(c)(
 		cryptorRef: CCCryptorRef,
 		inputLength: size_t,
 		final: Bool) -> size_t
-	typealias CCCryptorUpdateT = @convention(c)(
+	private typealias CCCryptorUpdateT = @convention(c)(
 		cryptorRef: CCCryptorRef,
 		dataIn: UnsafePointer<Void>,
 		dataInLength: Int,
 		dataOut: UnsafeMutablePointer<Void>,
 		dataOutAvailable: Int,
 		dataOutMoved: UnsafeMutablePointer<Int>) -> CCCryptorStatus
-	typealias CCCryptorFinalT = @convention(c)(
+	private typealias CCCryptorFinalT = @convention(c)(
 		cryptorRef: CCCryptorRef,
 		dataOut: UnsafeMutablePointer<Void>,
 		dataOutAvailable: Int,
 		dataOutMoved: UnsafeMutablePointer<Int>) -> CCCryptorStatus
-	typealias CCCryptorReleaseT = @convention(c)
+	private typealias CCCryptorReleaseT = @convention(c)
 		(cryptorRef: CCCryptorRef) -> CCCryptorStatus
 
 	
-	static private let dl = dlopen("/usr/lib/system/libcommonCrypto.dylib", RTLD_NOW)
-	static private let CCRandomGenerateBytes : CCRandomGenerateBytesT? =
+	private static let dl = dlopen("/usr/lib/system/libcommonCrypto.dylib", RTLD_NOW)
+	private static let CCRandomGenerateBytes : CCRandomGenerateBytesT? =
 		getFunc(dl, f: "CCRandomGenerateBytes")
-	static private let CCDigestGetOutputSize : CCDigestGetOutputSizeT? =
+	private static let CCDigestGetOutputSize : CCDigestGetOutputSizeT? =
 		getFunc(dl, f: "CCDigestGetOutputSize")
-	static private let CCDigest : CCDigestT? = getFunc(dl, f: "CCDigest")
-	static private let CCHmac : CCHmacT? = getFunc(dl, f: "CCHmac")
-	static private let CCCryptorCreateWithMode : CCCryptorCreateWithModeT? =
+	private static let CCDigest : CCDigestT? = getFunc(dl, f: "CCDigest")
+	private static let CCHmac : CCHmacT? = getFunc(dl, f: "CCHmac")
+	private static let CCCryptorCreateWithMode : CCCryptorCreateWithModeT? =
 		getFunc(dl, f: "CCCryptorCreateWithMode")
-	static private let CCCryptorGetOutputLength : CCCryptorGetOutputLengthT? =
+	private static let CCCryptorGetOutputLength : CCCryptorGetOutputLengthT? =
 		getFunc(dl, f: "CCCryptorGetOutputLength")
-	static private let CCCryptorUpdate : CCCryptorUpdateT? =
+	private static let CCCryptorUpdate : CCCryptorUpdateT? =
 		getFunc(dl, f: "CCCryptorUpdate")
-	static private let CCCryptorFinal : CCCryptorFinalT? =
+	private static let CCCryptorFinal : CCCryptorFinalT? =
 		getFunc(dl, f: "CCCryptorFinal")
-	static private let CCCryptorRelease : CCCryptorReleaseT? =
+	private static let CCCryptorRelease : CCCryptorReleaseT? =
 		getFunc(dl, f: "CCCryptorRelease")
 	
 	public class GCM {
 		
-		static public func crypt(opMode: OpMode, algorithm: Algorithm, data: NSData,
+		public static func crypt(opMode: OpMode, algorithm: Algorithm, data: NSData,
 		                         key: NSData, iv: NSData,
 		                         aData: NSData, tagLength: Int) throws -> (NSData, NSData) {
 			let result = NSMutableData(length: data.length)!
 			var tagLength_ = tagLength
 			let tag = NSMutableData(length: tagLength)!
-			try CCError.check(CCCryptorGCM!(op: opMode.rawValue, alg: algorithm.rawValue,
+			let status = CCCryptorGCM!(op: opMode.rawValue, alg: algorithm.rawValue,
 				key: key.bytes, keyLength: key.length, iv: iv.bytes, ivLen: iv.length,
 				aData: aData.bytes, aDataLen: aData.length,
 				dataIn: data.bytes, dataInLength: data.length,
-				dataOut: result.mutableBytes, tag: tag.bytes, tagLength: &tagLength_))
+				dataOut: result.mutableBytes, tag: tag.bytes, tagLength: &tagLength_)
+			guard status == noErr else { throw CCError(status) }
+
 			tag.length = tagLength_
 			return (result, tag)
 		}
 		
-		static public func available() -> Bool {
+		public static func available() -> Bool {
 			if CCCryptorGCM != nil {
 				return true
 			}
 			return false
 		}
 		
-		typealias CCCryptorGCMT = @convention(c) (op: CCOperation, alg: CCAlgorithm, key: UnsafePointer<Void>, keyLength: Int, iv: UnsafePointer<Void>, ivLen: Int, aData: UnsafePointer<Void>, aDataLen: Int, dataIn: UnsafePointer<Void>, dataInLength: Int, dataOut: UnsafeMutablePointer<Void>, tag: UnsafePointer<Void>, tagLength: UnsafeMutablePointer<Int>) -> CCCryptorStatus
-		static private let CCCryptorGCM : CCCryptorGCMT? = getFunc(dl, f: "CCCryptorGCM")
+		private typealias CCCryptorGCMT = @convention(c) (op: CCOperation, alg: CCAlgorithm, key: UnsafePointer<Void>, keyLength: Int, iv: UnsafePointer<Void>, ivLen: Int, aData: UnsafePointer<Void>, aDataLen: Int, dataIn: UnsafePointer<Void>, dataInLength: Int, dataOut: UnsafeMutablePointer<Void>, tag: UnsafePointer<Void>, tagLength: UnsafeMutablePointer<Int>) -> CCCryptorStatus
+		private static let CCCryptorGCM : CCCryptorGCMT? = getFunc(dl, f: "CCCryptorGCM")
 		
 	}
 	
 	public class CCM {
 		
-		static public func crypt(opMode: OpMode, algorithm: Algorithm, data: NSData,
+		public static func crypt(opMode: OpMode, algorithm: Algorithm, data: NSData,
 		                         key: NSData, iv: NSData,
 		                         aData: NSData, tagLength: Int) throws -> (NSData, NSData) {
 			var cryptor : CCCryptorRef = nil
-			try CCError.check(CCCryptorCreateWithMode!(
+			var status = CCCryptorCreateWithMode!(
 				op: opMode.rawValue, mode: AuthBlockMode.CCM.rawValue,
 				alg: algorithm.rawValue, padding: Padding.NoPadding.rawValue,
 				iv: nil, key: key.bytes, keyLength: key.length,
 				tweak: nil, tweakLength: 0, numRounds: 0,
-				options: CCModeOptions(), cryptorRef: &cryptor))
+				options: CCModeOptions(), cryptorRef: &cryptor)
+			guard status == noErr else { throw CCError(status) }
 			defer { CCCryptorRelease!(cryptorRef: cryptor) }
 
-			try CCError.check(CCCryptorAddParameter!(cryptorRef: cryptor,
+			status = CCCryptorAddParameter!(cryptorRef: cryptor,
 				parameter: Parameter.dataSize.rawValue,
-				data: nil, dataLength: data.length))
+				data: nil, dataLength: data.length)
+			guard status == noErr else { throw CCError(status) }
 
-			try CCError.check(CCCryptorAddParameter!(cryptorRef: cryptor,
+
+			status = CCCryptorAddParameter!(cryptorRef: cryptor,
 				parameter: Parameter.macSize.rawValue,
-				data: nil, dataLength: tagLength))
+				data: nil, dataLength: tagLength)
+			guard status == noErr else { throw CCError(status) }
+
 			
-			try CCError.check(CCCryptorAddParameter!(cryptorRef: cryptor,
+			status = CCCryptorAddParameter!(cryptorRef: cryptor,
 				parameter: Parameter.iv.rawValue,
-				data: iv.bytes, dataLength: iv.length))
+				data: iv.bytes, dataLength: iv.length)
+			guard status == noErr else { throw CCError(status) }
+
 			
-			try CCError.check(CCCryptorAddParameter!(cryptorRef: cryptor,
+			status = CCCryptorAddParameter!(cryptorRef: cryptor,
 				parameter: Parameter.authData.rawValue,
-				data: aData.bytes, dataLength: aData.length))
+				data: aData.bytes, dataLength: aData.length)
+			guard status == noErr else { throw CCError(status) }
+
 
 			let result = NSMutableData(length: data.length)!
 
 			var updateLen: size_t = 0
-			try CCError.check(CCCryptorUpdate!(
+			status = CCCryptorUpdate!(
 				cryptorRef: cryptor,
 				dataIn: data.bytes, dataInLength: data.length,
 				dataOut: result.mutableBytes, dataOutAvailable: result.length,
-				dataOutMoved: &updateLen))
+				dataOutMoved: &updateLen)
+			guard status == noErr else { throw CCError(status) }
 
 			var finalLen: size_t = 0
-			try CCError.check(CCCryptorFinal!(
+			status = CCCryptorFinal!(
 				cryptorRef: cryptor,
 				dataOut: result.mutableBytes + updateLen,
 				dataOutAvailable: result.length - updateLen,
-				dataOutMoved: &finalLen))
+				dataOutMoved: &finalLen)
+			guard status == noErr else { throw CCError(status) }
+
 			result.length = updateLen + finalLen
 			
 			var tagLength_ = tagLength
 			let tag = NSMutableData(length: tagLength)!
-			try CCError.check(CCCryptorGetParameter!(cryptorRef: cryptor,
+			status = CCCryptorGetParameter!(cryptorRef: cryptor,
 				parameter: Parameter.authTag.rawValue,
-				data: tag.bytes, dataLength: &tagLength_))
+				data: tag.bytes, dataLength: &tagLength_)
+			guard status == noErr else { throw CCError(status) }
+
 			tag.length = tagLength_
 			
 			return (result, tag)
 		}
 		
-		static public func available() -> Bool {
+		public static func available() -> Bool {
 			if CCCryptorAddParameter != nil &&
 				CCCryptorGetParameter != nil {
 				return true
@@ -1041,16 +1167,16 @@ public class CC {
 			return false
 		}
 		
-		typealias CCParameter = UInt32
+		private typealias CCParameter = UInt32
 		private enum Parameter : CCParameter {
 			case iv, authData, macSize, dataSize, authTag
 		}
-		typealias CCCryptorAddParameterT = @convention(c) (cryptorRef: CCCryptorRef, parameter: CCParameter, data: UnsafePointer<Void>, dataLength: size_t) -> CCCryptorStatus
-		static private let CCCryptorAddParameter : CCCryptorAddParameterT? =
+		private typealias CCCryptorAddParameterT = @convention(c) (cryptorRef: CCCryptorRef, parameter: CCParameter, data: UnsafePointer<Void>, dataLength: size_t) -> CCCryptorStatus
+		private static let CCCryptorAddParameter : CCCryptorAddParameterT? =
 			getFunc(dl, f: "CCCryptorAddParameter")
 		
-		typealias CCCryptorGetParameterT = @convention(c) (cryptorRef: CCCryptorRef, parameter: CCParameter, data: UnsafePointer<Void>, dataLength: UnsafeMutablePointer<size_t>) -> CCCryptorStatus
-		static private let CCCryptorGetParameter : CCCryptorGetParameterT? =
+		private typealias CCCryptorGetParameterT = @convention(c) (cryptorRef: CCCryptorRef, parameter: CCParameter, data: UnsafePointer<Void>, dataLength: UnsafeMutablePointer<size_t>) -> CCCryptorStatus
+		private static let CCCryptorGetParameter : CCCryptorGetParameterT? =
 			getFunc(dl, f: "CCCryptorGetParameter")
 	}
 	
@@ -1063,14 +1189,15 @@ public class CC {
 			case OAEP = 1002
 		}
 		
-		static public func generateKeyPair(keySize: Int = 4096) throws -> (NSData, NSData) {
+		public static func generateKeyPair(keySize: Int = 4096) throws -> (NSData, NSData) {
 			var privateKey: CCRSACryptorRef = nil
 			var publicKey: CCRSACryptorRef = nil
-			try CCError.check(CCRSACryptorGeneratePair!(
+			let status = CCRSACryptorGeneratePair!(
 				keySize: keySize,
 				e: 65537,
 				publicKey: &publicKey,
-				privateKey: &privateKey))
+				privateKey: &privateKey)
+			guard status == noErr else { throw CCError(status) }
 			
 			defer {
 				CCRSACryptorRelease!(privateKey)
@@ -1083,7 +1210,7 @@ public class CC {
 			return (privDERKey, pubDERKey)
 		}
 		
-		static public func encrypt(data: NSData, derKey: NSData, padding: AsymmetricPadding,
+		public static func encrypt(data: NSData, derKey: NSData, tag: NSData, padding: AsymmetricPadding,
 		                           digest: DigestAlgorithm) throws -> NSData {
 			let key = try importFromDERKey(derKey)
 			defer { CCRSACryptorRelease!(key) }
@@ -1091,75 +1218,77 @@ public class CC {
 			var bufferSize = getKeySize(key)
 			let buffer = NSMutableData(length: bufferSize)!
 			
-			try CCError.check(CCRSACryptorEncrypt!(
+			let status = CCRSACryptorEncrypt!(
 				publicKey: key,
 				padding: padding.rawValue,
 				plainText: data.bytes,
 				plainTextLen: data.length,
 				cipherText: buffer.mutableBytes,
 				cipherTextLen: &bufferSize,
-				tagData: nil, tagDataLen: 0,
-				digestType: digest.rawValue))
+				tagData: tag.bytes, tagDataLen: tag.length,
+				digestType: digest.rawValue)
+			guard status == noErr else { throw CCError(status) }
+
 
 			buffer.length = bufferSize
 			
 			return buffer
 		}
 		
-		static public func decrypt(data: NSData, derKey: NSData, padding: AsymmetricPadding,
-		                           digest: DigestAlgorithm) throws -> (NSData, NSData) {
+		public static func decrypt(data: NSData, derKey: NSData, tag: NSData, padding: AsymmetricPadding,
+		                           digest: DigestAlgorithm) throws -> (NSData, Int) {
 			let key = try importFromDERKey(derKey)
 			defer { CCRSACryptorRelease!(key) }
 			
 			let blockSize = getKeySize(key)
 			
-			guard data.length >= blockSize else {
-				throw CCError.DecodeError
-			}
-			
 			var bufferSize = blockSize
 			let buffer = NSMutableData(length: bufferSize)!
 			
-			try CCError.check(CCRSACryptorDecrypt!(
+			let status = CCRSACryptorDecrypt!(
 				privateKey: key,
 				padding: padding.rawValue,
 				cipherText: data.bytes,
 				cipherTextLen: bufferSize,
 				plainText: buffer.mutableBytes,
 				plainTextLen: &bufferSize,
-				tagData: nil, tagDataLen: 0,
-				digestType: digest.rawValue))
-			
+				tagData: tag.bytes, tagDataLen: tag.length,
+				digestType: digest.rawValue)
+			guard status == noErr else { throw CCError(status) }
 			buffer.length = bufferSize
-			let tail = data.subdataWithRange(NSRange(location: blockSize, length: data.length - blockSize))
-			return (buffer, tail)
+			
+			return (buffer, blockSize)
 		}
 		
-		static private func importFromDERKey(derKey: NSData) throws -> CCRSACryptorRef {
+		private static func importFromDERKey(derKey: NSData) throws -> CCRSACryptorRef {
 			var key : CCRSACryptorRef = nil
-			try CCError.check(CCRSACryptorImport!(
+			let status = CCRSACryptorImport!(
 				keyPackage: derKey.bytes,
 				keyPackageLen: derKey.length,
-				key: &key))
+				key: &key)
+			guard status == noErr else { throw CCError(status) }
+
 			return key
 		}
 		
-		static private func exportToDERKey(key: CCRSACryptorRef) throws -> NSData {
+		private static func exportToDERKey(key: CCRSACryptorRef) throws -> NSData {
 			var derKeyLength = 8192
 			let derKey = NSMutableData(length: derKeyLength)!
-			try CCError.check(CCRSACryptorExport!(
+			let status = CCRSACryptorExport!(
 				key: key,
 				out: derKey.mutableBytes,
-				outLen: &derKeyLength))
+				outLen: &derKeyLength)
+			guard status == noErr else { throw CCError(status) }
+
 			derKey.length = derKeyLength
 			return derKey
 		}
 		
-		static private func getKeySize(key: CCRSACryptorRef) -> Int {
+		private static func getKeySize(key: CCRSACryptorRef) -> Int {
 			return Int(CCRSAGetKeySize!(key)/8)
 		}
 		
-		static public func sign(hash: NSData, derKey: NSData, padding: AsymmetricPadding,
+		public static func sign(hash: NSData, derKey: NSData, padding: AsymmetricPadding,
 		                        digest: DigestAlgorithm) throws -> NSData {
 			let key = try importFromDERKey(derKey)
 			defer { CCRSACryptorRelease!(key) }
@@ -1178,17 +1307,19 @@ public class CC {
 				assertionFailure("corecrypto: sign with OAEP is buggy in this configuration")
 			}
 			
-			try CCError.check(CCRSACryptorSign!(
+			let status = CCRSACryptorSign!(
 				privateKey: key,
 				padding: padding.rawValue,
 				hashToSign: hash.bytes, hashSignLen: hash.length,
 				digestType: digest.rawValue, saltLen: 0 /*unused*/,
-				signedData: signedData.mutableBytes, signedDataLen: &signedDataLength))
+				signedData: signedData.mutableBytes, signedDataLen: &signedDataLength)
+			guard status == noErr else { throw CCError(status) }
+
 			signedData.length = signedDataLength
 			return signedData
 		}
 		
-		static public func verify(hash: NSData, derKey: NSData, padding: AsymmetricPadding,
+		public static func verify(hash: NSData, derKey: NSData, padding: AsymmetricPadding,
 		                          digest: DigestAlgorithm, signedData: NSData) throws -> Bool {
 			let key = try importFromDERKey(derKey)
 			defer { CCRSACryptorRelease!(key) }
@@ -1207,11 +1338,12 @@ public class CC {
 			if status == kCCNotVerified {
 				return false
 			}
-			try CCError.check(status)
+			guard status == noErr else { throw CCError(status) }
+
 			return true
 		}
 		
-		static public func available() -> Bool {
+		public static func available() -> Bool {
 			return CCRSACryptorGeneratePair != nil &&
 				CCRSACryptorRelease != nil &&
 				CCRSAGetKeySize != nil &&
@@ -1223,22 +1355,22 @@ public class CC {
 				CCRSACryptorVerify != nil
 		}
 		
-		typealias CCRSACryptorRef = UnsafePointer<Void>
-		typealias CCRSACryptorGeneratePairT = @convention(c) (
+		private typealias CCRSACryptorRef = UnsafePointer<Void>
+		private typealias CCRSACryptorGeneratePairT = @convention(c) (
 			keySize: Int,
 			e: UInt32,
 			publicKey: UnsafeMutablePointer<CCRSACryptorRef>,
 			privateKey: UnsafeMutablePointer<CCRSACryptorRef>) -> CCCryptorStatus
-		static private let CCRSACryptorGeneratePair : CCRSACryptorGeneratePairT? =
+		private static let CCRSACryptorGeneratePair : CCRSACryptorGeneratePairT? =
 			getFunc(CC.dl, f: "CCRSACryptorGeneratePair")
 		
-		typealias CCRSACryptorReleaseT = @convention(c) (CCRSACryptorRef) -> Void
-		static let CCRSACryptorRelease : CCRSACryptorReleaseT? = getFunc(dl, f: "CCRSACryptorRelease")
+		private typealias CCRSACryptorReleaseT = @convention(c) (CCRSACryptorRef) -> Void
+		private static let CCRSACryptorRelease : CCRSACryptorReleaseT? = getFunc(dl, f: "CCRSACryptorRelease")
 		
-		typealias CCRSAGetKeySizeT = @convention(c) (CCRSACryptorRef) -> Int32
-		static let CCRSAGetKeySize : CCRSAGetKeySizeT? = getFunc(dl, f: "CCRSAGetKeySize")
+		private typealias CCRSAGetKeySizeT = @convention(c) (CCRSACryptorRef) -> Int32
+		private static let CCRSAGetKeySize : CCRSAGetKeySizeT? = getFunc(dl, f: "CCRSAGetKeySize")
 		
-		typealias CCRSACryptorEncryptT = @convention(c) (
+		private typealias CCRSACryptorEncryptT = @convention(c) (
 			publicKey: CCRSACryptorRef,
 			padding: CCAsymmetricPadding,
 			plainText: UnsafePointer<Void>,
@@ -1248,9 +1380,9 @@ public class CC {
 			tagData: UnsafePointer<Void>,
 			tagDataLen: Int,
 			digestType: CCDigestAlgorithm) -> CCCryptorStatus
-		static let CCRSACryptorEncrypt : CCRSACryptorEncryptT? = getFunc(dl, f: "CCRSACryptorEncrypt")
+		private static let CCRSACryptorEncrypt : CCRSACryptorEncryptT? = getFunc(dl, f: "CCRSACryptorEncrypt")
 		
-		typealias CCRSACryptorDecryptT = @convention (c) (
+		private typealias CCRSACryptorDecryptT = @convention (c) (
 			privateKey: CCRSACryptorRef,
 			padding: CCAsymmetricPadding,
 			cipherText: UnsafePointer<Void>,
@@ -1260,21 +1392,21 @@ public class CC {
 			tagData: UnsafePointer<Void>,
 			tagDataLen: Int,
 			digestType: CCDigestAlgorithm) -> CCCryptorStatus
-		static let CCRSACryptorDecrypt : CCRSACryptorDecryptT? = getFunc(dl, f: "CCRSACryptorDecrypt")
+		private static let CCRSACryptorDecrypt : CCRSACryptorDecryptT? = getFunc(dl, f: "CCRSACryptorDecrypt")
 		
-		typealias CCRSACryptorExportT = @convention(c) (
+		private typealias CCRSACryptorExportT = @convention(c) (
 			key: CCRSACryptorRef,
 			out: UnsafeMutablePointer<Void>,
 			outLen: UnsafeMutablePointer<Int>) -> CCCryptorStatus
-		static let CCRSACryptorExport : CCRSACryptorExportT? = getFunc(dl, f: "CCRSACryptorExport")
+		private static let CCRSACryptorExport : CCRSACryptorExportT? = getFunc(dl, f: "CCRSACryptorExport")
 		
-		typealias CCRSACryptorImportT = @convention(c) (
+		private typealias CCRSACryptorImportT = @convention(c) (
 			keyPackage: UnsafePointer<Void>,
 			keyPackageLen: Int,
 			key: UnsafeMutablePointer<CCRSACryptorRef>) -> CCCryptorStatus
-		static let CCRSACryptorImport : CCRSACryptorImportT? = getFunc(dl, f: "CCRSACryptorImport")
+		private static let CCRSACryptorImport : CCRSACryptorImportT? = getFunc(dl, f: "CCRSACryptorImport")
 		
-		typealias CCRSACryptorSignT = @convention(c) (
+		private typealias CCRSACryptorSignT = @convention(c) (
 			privateKey: CCRSACryptorRef,
 			padding: CCAsymmetricPadding,
 			hashToSign: UnsafePointer<Void>,
@@ -1283,9 +1415,9 @@ public class CC {
 			saltLen: size_t,
 			signedData: UnsafeMutablePointer<Void>,
 			signedDataLen: UnsafeMutablePointer<Int>) -> CCCryptorStatus
-		static let CCRSACryptorSign : CCRSACryptorSignT? = getFunc(dl, f: "CCRSACryptorSign")
+		private static let CCRSACryptorSign : CCRSACryptorSignT? = getFunc(dl, f: "CCRSACryptorSign")
 		
-		typealias CCRSACryptorVerifyT = @convention(c) (
+		private typealias CCRSACryptorVerifyT = @convention(c) (
 			publicKey: CCRSACryptorRef,
 			padding: CCAsymmetricPadding,
 			hash: UnsafePointer<Void>,
@@ -1294,19 +1426,21 @@ public class CC {
 			saltLen: size_t,
 			signedData: UnsafePointer<Void>,
 			signedDataLen: size_t) -> CCCryptorStatus
-		static let CCRSACryptorVerify : CCRSACryptorVerifyT? = getFunc(dl, f: "CCRSACryptorVerify")
+		private static let CCRSACryptorVerify : CCRSACryptorVerifyT? = getFunc(dl, f: "CCRSACryptorVerify")
 
 	}
 	
 	public class EC {
 		
-		static public func generateKeyPair(keySize: Int) throws -> (NSData, NSData) {
+		public static func generateKeyPair(keySize: Int) throws -> (NSData, NSData) {
 			var privKey : CCECCryptorRef = nil
 			var pubKey : CCECCryptorRef = nil
-			try CCError.check(CCECCryptorGeneratePair!(
+			let status = CCECCryptorGeneratePair!(
 				keySize: keySize,
 				publicKey: &pubKey,
-				privateKey: &privKey))
+				privateKey: &privKey)
+			guard status == noErr else { throw CCError(status) }
+
 			defer {
 				CCECCryptorRelease!(key: privKey)
 				CCECCryptorRelease!(key: pubKey)
@@ -1317,34 +1451,38 @@ public class CC {
 			return (privKeyDER, pubKeyDER)
 		}
 		
-		static public func signHash(privateKey: NSData, hash: NSData) throws -> NSData {
+		public static func signHash(privateKey: NSData, hash: NSData) throws -> NSData {
 			let privKey = try importKey(privateKey, format: .ImportKeyBinary, keyType: .KeyPrivate)
 			defer { CCECCryptorRelease!(key: privKey) }
 			
 			var signedDataLength = 4096
 			let signedData = NSMutableData(length:signedDataLength)!
-			try CCError.check(CCECCryptorSignHash!(
+			let status = CCECCryptorSignHash!(
 				privateKey: privKey,
 				hashToSign: hash.bytes, hashSignLen: hash.length,
-				signedData: signedData.mutableBytes, signedDataLen: &signedDataLength))
+				signedData: signedData.mutableBytes, signedDataLen: &signedDataLength)
+			guard status == noErr else { throw CCError(status) }
+
 			signedData.length = signedDataLength
 			return signedData
 		}
 		
-		static public func verifyHash(publicKey: NSData, hash: NSData, signedData: NSData) throws -> Bool {
+		public static func verifyHash(publicKey: NSData, hash: NSData, signedData: NSData) throws -> Bool {
 			let pubKey = try importKey(publicKey, format: .ImportKeyBinary, keyType: .KeyPublic)
 			defer { CCECCryptorRelease!(key: pubKey) }
 			
 			var valid : UInt32 = 0
-			try CCError.check(CCECCryptorVerifyHash!(
+			let status = CCECCryptorVerifyHash!(
 				publicKey:pubKey,
 				hash: hash.bytes, hashLen: hash.length,
 				signedData: signedData.bytes, signedDataLen: signedData.length,
-				valid: &valid))
+				valid: &valid)
+			guard status == noErr else { throw CCError(status) }
+
 			return valid != 0
 		}
 		
-		static public func computeSharedSecret(privateKey: NSData, publicKey: NSData) throws -> NSData {
+		public static func computeSharedSecret(privateKey: NSData, publicKey: NSData) throws -> NSData {
 			let privKey = try importKey(privateKey, format: .ImportKeyBinary, keyType: .KeyPrivate)
 			let pubKey = try importKey(publicKey, format: .ImportKeyBinary, keyType: .KeyPublic)
 			defer {
@@ -1354,37 +1492,42 @@ public class CC {
 			
 			var outSize = 8192
 			let result = NSMutableData(length:outSize)!
-			try CCError.check(CCECCryptorComputeSharedSecret!(
-				privateKey: privKey, publicKey: pubKey, out:result.mutableBytes, outLen:&outSize))
+			let status = CCECCryptorComputeSharedSecret!(
+				privateKey: privKey, publicKey: pubKey, out:result.mutableBytes, outLen:&outSize)
+			guard status == noErr else { throw CCError(status) }
+
 			result.length = outSize
 			return result
 		}
 
-		static private func importKey(key: NSData,
-		                              format: KeyExternalFormat,
-		                              keyType: KeyType) throws -> CCECCryptorRef {
+		private static func importKey(key: NSData, format: KeyExternalFormat,
+		                      keyType: KeyType) throws -> CCECCryptorRef {
 			var impKey : CCECCryptorRef = nil
-			try CCError.check(CCECCryptorImportKey!(format: format.rawValue,
+			let status = CCECCryptorImportKey!(format: format.rawValue,
 			                     keyPackage: key.bytes, keyPackageLen:key.length,
-			                     keyType: keyType.rawValue, key: &impKey))
+			                     keyType: keyType.rawValue, key: &impKey)
+			guard status == noErr else { throw CCError(status) }
+
 			return impKey
 		}
 		
-		static private func exportKey(key: CCECCryptorRef,
-		                              format: KeyExternalFormat, type: KeyType) throws -> NSData {
+		private static func exportKey(key: CCECCryptorRef, format: KeyExternalFormat,
+		                      type: KeyType) throws -> NSData {
 			var expKeyLength = 8192
 			let expKey = NSMutableData(length:expKeyLength)!
-			try CCError.check(CCECCryptorExportKey!(
+			let status = CCECCryptorExportKey!(
 				format: format.rawValue,
 				keyPackage: expKey.mutableBytes,
 				keyPackageLen: &expKeyLength,
 				keyType: type.rawValue,
-				key: key))
+				key: key)
+			guard status == noErr else { throw CCError(status) }
+
 			expKey.length = expKeyLength
 			return expKey
 		}
 		
-		static public func available() -> Bool {
+		public static func available() -> Bool {
 			return CCECCryptorGeneratePair != nil &&
 				CCECCryptorImportKey != nil &&
 				CCECCryptorExportKey != nil &&
@@ -1402,62 +1545,62 @@ public class CC {
 		public typealias CCECKeyType = UInt32
 		
 		
-		public enum KeyExternalFormat : CCECKeyExternalFormat {
+		private  enum KeyExternalFormat : CCECKeyExternalFormat {
 			case ImportKeyBinary = 0, ImportKeyDER
 		}
-		public typealias CCECKeyExternalFormat = UInt32
+		private typealias CCECKeyExternalFormat = UInt32
 		
-		typealias CCECCryptorRef = UnsafePointer<Void>
-		typealias CCECCryptorGeneratePairT = @convention(c) (
+		private typealias CCECCryptorRef = UnsafePointer<Void>
+		private typealias CCECCryptorGeneratePairT = @convention(c) (
 			keySize: size_t ,
 			publicKey: UnsafeMutablePointer<CCECCryptorRef>,
 			privateKey: UnsafeMutablePointer<CCECCryptorRef>) -> CCCryptorStatus
-		static let CCECCryptorGeneratePair : CCECCryptorGeneratePairT? =
+		private static let CCECCryptorGeneratePair : CCECCryptorGeneratePairT? =
 			getFunc(dl, f: "CCECCryptorGeneratePair")
 		
-		typealias CCECCryptorImportKeyT = @convention(c) (
+		private typealias CCECCryptorImportKeyT = @convention(c) (
 			format: CCECKeyExternalFormat,
 			keyPackage: UnsafePointer<Void>, keyPackageLen: size_t,
 			keyType: CCECKeyType, key: UnsafeMutablePointer<CCECCryptorRef>) -> CCCryptorStatus
-		static let CCECCryptorImportKey : CCECCryptorImportKeyT? =
+		private static let CCECCryptorImportKey : CCECCryptorImportKeyT? =
 			getFunc(dl, f: "CCECCryptorImportKey")
 		
-		typealias CCECCryptorExportKeyT = @convention(c) (
+		private typealias CCECCryptorExportKeyT = @convention(c) (
 			format: CCECKeyExternalFormat,
 			keyPackage: UnsafePointer<Void>,
 			keyPackageLen: UnsafePointer<size_t>,
 			keyType: CCECKeyType , key: CCECCryptorRef) -> CCCryptorStatus
-		static let CCECCryptorExportKey : CCECCryptorExportKeyT? =
+		private static let CCECCryptorExportKey : CCECCryptorExportKeyT? =
 			getFunc(dl, f: "CCECCryptorExportKey")
 		
-		typealias CCECCryptorReleaseT = @convention(c) (
+		private typealias CCECCryptorReleaseT = @convention(c) (
 			key: CCECCryptorRef) -> Void
-		static let CCECCryptorRelease : CCECCryptorReleaseT? =
+		private static let CCECCryptorRelease : CCECCryptorReleaseT? =
 			getFunc(dl, f: "CCECCryptorRelease")
 		
-		typealias CCECCryptorSignHashT = @convention(c)(
+		private typealias CCECCryptorSignHashT = @convention(c)(
 			privateKey: CCECCryptorRef,
 			hashToSign: UnsafePointer<Void>,
 			hashSignLen: size_t,
 			signedData: UnsafeMutablePointer<Void>,
 			signedDataLen: UnsafeMutablePointer<size_t>) -> CCCryptorStatus
-		static let CCECCryptorSignHash : CCECCryptorSignHashT? =
+		private static let CCECCryptorSignHash : CCECCryptorSignHashT? =
 			getFunc(dl, f: "CCECCryptorSignHash")
 		
-		typealias CCECCryptorVerifyHashT = @convention(c)(
+		private typealias CCECCryptorVerifyHashT = @convention(c)(
 			publicKey: CCECCryptorRef,
 			hash: UnsafePointer<Void>, hashLen: size_t,
 			signedData: UnsafePointer<Void>, signedDataLen: size_t,
 			valid: UnsafeMutablePointer<UInt32>) -> CCCryptorStatus
-		static let CCECCryptorVerifyHash : CCECCryptorVerifyHashT? =
+		private static let CCECCryptorVerifyHash : CCECCryptorVerifyHashT? =
 			getFunc(dl, f: "CCECCryptorVerifyHash")
 		
-		typealias CCECCryptorComputeSharedSecretT = @convention(c)(
+		private typealias CCECCryptorComputeSharedSecretT = @convention(c)(
 			privateKey: CCECCryptorRef,
 			publicKey: CCECCryptorRef,
 			out: UnsafeMutablePointer<Void>,
 			outLen: UnsafeMutablePointer<size_t>) -> CCCryptorStatus
-		static let CCECCryptorComputeSharedSecret : CCECCryptorComputeSharedSecretT? =
+		private static let CCECCryptorComputeSharedSecret : CCECCryptorComputeSharedSecretT? =
 			getFunc(dl, f: "CCECCryptorComputeSharedSecret")
 	}
 	
@@ -1477,115 +1620,122 @@ public class CC {
 			}
 		}
 		
-		static public func PBKDF2(password: String, salt: NSData,
+		public static func PBKDF2(password: String, salt: NSData,
 		                         prf: PRFAlg, rounds: UInt32) throws -> NSData {
 			
 			let result = NSMutableData(length:prf.cc.digestLength)!
 			let passwData = password.dataUsingEncoding(NSUTF8StringEncoding)!
-			try CCError.check(CCKeyDerivationPBKDF!(algorithm: PBKDFAlgorithm.PBKDF2.rawValue,
+			let status = CCKeyDerivationPBKDF!(algorithm: PBKDFAlgorithm.PBKDF2.rawValue,
 			                      password: passwData.bytes, passwordLen: passwData.length,
 			                      salt: salt.bytes, saltLen: salt.length,
 			                      prf: prf.rawValue, rounds: rounds,
-			                      derivedKey: result.mutableBytes, derivedKeyLen: result.length))
+			                      derivedKey: result.mutableBytes, derivedKeyLen: result.length)
+			guard status == noErr else { throw CCError(status) }
+
 			return result
 		}
 		
-		static public func available() -> Bool {
+		public static func available() -> Bool {
 			return CCKeyDerivationPBKDF != nil
 		}
 		
-		typealias CCPBKDFAlgorithm = UInt32
-		enum PBKDFAlgorithm : CCPBKDFAlgorithm {
+		private typealias CCPBKDFAlgorithm = UInt32
+		private enum PBKDFAlgorithm : CCPBKDFAlgorithm {
 			case PBKDF2 = 2
 		}
 		
-		typealias CCKeyDerivationPBKDFT = @convention(c) (
+		private typealias CCKeyDerivationPBKDFT = @convention(c) (
 			algorithm: CCPBKDFAlgorithm,
 			password: UnsafePointer<Void>, passwordLen: size_t,
 			salt: UnsafePointer<Void>, saltLen: size_t,
 			prf: CCPseudoRandomAlgorithm, rounds: uint,
 			derivedKey: UnsafeMutablePointer<Void>, derivedKeyLen: size_t) -> CCCryptorStatus
-		static let CCKeyDerivationPBKDF : CCKeyDerivationPBKDFT? = getFunc(dl, f: "CCKeyDerivationPBKDF")
+		private static let CCKeyDerivationPBKDF : CCKeyDerivationPBKDFT? =
+			getFunc(dl, f: "CCKeyDerivationPBKDF")
 
 	}
 	
 	public class KeyWrap {
 		
-		static private let rfc3394_iv_a : [UInt8] = [0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6]
-		static public let rfc3394_iv = NSData(bytes: rfc3394_iv_a, length:rfc3394_iv_a.count)
+		private static let rfc3394_iv_a : [UInt8] = [0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6,0xA6]
+		public static let rfc3394_iv = NSData(bytes: rfc3394_iv_a, length:rfc3394_iv_a.count)
 		
-		static public func SymmetricKeyWrap(iv: NSData,
+		public static func SymmetricKeyWrap(iv: NSData,
 		                                    kek: NSData,
 		                                    rawKey: NSData) throws -> NSData {
 			let alg = WrapAlg.AES.rawValue
 			var wrappedKeyLength = CCSymmetricWrappedSize!(algorithm: alg, rawKeyLen: rawKey.length)
 			let wrappedKey = NSMutableData(length:wrappedKeyLength)!
-			try CCError.check(CCSymmetricKeyWrap!(
+			let status = CCSymmetricKeyWrap!(
 				algorithm: alg,
 				iv: iv.bytes, ivLen: iv.length,
 				kek: kek.bytes, kekLen: kek.length,
 				rawKey: rawKey.bytes, rawKeyLen: rawKey.length,
-				wrappedKey: wrappedKey.mutableBytes, wrappedKeyLen:&wrappedKeyLength))
+				wrappedKey: wrappedKey.mutableBytes, wrappedKeyLen:&wrappedKeyLength)
+			guard status == noErr else { throw CCError(status) }
+
 			wrappedKey.length = wrappedKeyLength
 			return wrappedKey
 		}
 		
-		static public func SymmetricKeyUnwrap(iv: NSData,
+		public static func SymmetricKeyUnwrap(iv: NSData,
 		                                      kek: NSData,
 		                                      wrappedKey: NSData) throws -> NSData {
 			let alg = WrapAlg.AES.rawValue
 			var rawKeyLength = CCSymmetricUnwrappedSize!(algorithm: alg, wrappedKeyLen: wrappedKey.length)
 			let rawKey = NSMutableData(length:rawKeyLength)!
-			try CCError.check(CCSymmetricKeyUnwrap!(
+			let status = CCSymmetricKeyUnwrap!(
 				algorithm: alg,
 				iv: iv.bytes, ivLen: iv.length,
 				kek: kek.bytes, kekLen: kek.length,
 				wrappedKey: wrappedKey.bytes, wrappedKeyLen: wrappedKey.length,
-				rawKey: rawKey.mutableBytes, rawKeyLen:&rawKeyLength))
+				rawKey: rawKey.mutableBytes, rawKeyLen:&rawKeyLength)
+			guard status == noErr else { throw CCError(status) }
+
 			rawKey.length = rawKeyLength
 			return rawKey
 		}
 		
-		static public func available() -> Bool {
+		public static func available() -> Bool {
 			return CCSymmetricKeyWrap != nil &&
 				CCSymmetricKeyUnwrap != nil &&
 				CCSymmetricWrappedSize != nil &&
 				CCSymmetricUnwrappedSize != nil
 		}
 		
-		enum WrapAlg : CCWrappingAlgorithm {
+		private enum WrapAlg : CCWrappingAlgorithm {
 			case AES = 1
 		}
-		typealias CCWrappingAlgorithm = UInt32;
+		private typealias CCWrappingAlgorithm = UInt32;
 		
-		typealias CCSymmetricKeyWrapT = @convention(c) (
+		private typealias CCSymmetricKeyWrapT = @convention(c) (
 			algorithm: CCWrappingAlgorithm,
 			iv: UnsafePointer<Void>, ivLen: size_t,
 			kek: UnsafePointer<Void>, kekLen: size_t,
 			rawKey: UnsafePointer<Void>, rawKeyLen: size_t,
 			wrappedKey: UnsafeMutablePointer<Void>,
 			wrappedKeyLen: UnsafePointer<size_t>) -> CCCryptorStatus
-		static let CCSymmetricKeyWrap : CCSymmetricKeyWrapT? = getFunc(dl, f: "CCSymmetricKeyWrap")
+		private static let CCSymmetricKeyWrap : CCSymmetricKeyWrapT? = getFunc(dl, f: "CCSymmetricKeyWrap")
 
-		typealias CCSymmetricKeyUnwrapT = @convention(c) (
+		private typealias CCSymmetricKeyUnwrapT = @convention(c) (
 			algorithm: CCWrappingAlgorithm,
 			iv: UnsafePointer<Void>, ivLen: size_t,
 			kek: UnsafePointer<Void>, kekLen: size_t,
 			wrappedKey: UnsafePointer<Void>, wrappedKeyLen: size_t,
 			rawKey: UnsafeMutablePointer<Void>,
 			rawKeyLen: UnsafePointer<size_t>) -> CCCryptorStatus
-		static let CCSymmetricKeyUnwrap : CCSymmetricKeyUnwrapT? = getFunc(dl, f: "CCSymmetricKeyUnwrap")
+		private static let CCSymmetricKeyUnwrap : CCSymmetricKeyUnwrapT? = getFunc(dl, f: "CCSymmetricKeyUnwrap")
 		
-		typealias CCSymmetricWrappedSizeT = @convention(c) (
+		private typealias CCSymmetricWrappedSizeT = @convention(c) (
 			algorithm: CCWrappingAlgorithm,
 			rawKeyLen: size_t) -> size_t
-		static let CCSymmetricWrappedSize : CCSymmetricWrappedSizeT? =
+		private static let CCSymmetricWrappedSize : CCSymmetricWrappedSizeT? =
 			getFunc(dl, f: "CCSymmetricWrappedSize")
 
-		typealias CCSymmetricUnwrappedSizeT = @convention(c) (
+		private typealias CCSymmetricUnwrappedSizeT = @convention(c) (
 			algorithm: CCWrappingAlgorithm,
 			wrappedKeyLen: size_t) -> size_t
-		static let CCSymmetricUnwrappedSize : CCSymmetricUnwrappedSizeT? =
+		private static let CCSymmetricUnwrappedSize : CCSymmetricUnwrappedSizeT? =
 			getFunc(dl, f: "CCSymmetricUnwrappedSize")
 		
 	}
