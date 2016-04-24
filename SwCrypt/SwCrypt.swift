@@ -983,6 +983,7 @@ public class CC {
 			DH.available() &&
 			EC.available() &&
 			CRC.available() &&
+			CMAC.available() &&
 			GCM.available() &&
 			CCM.available()
 	}
@@ -1743,6 +1744,27 @@ public class CC {
 			input: UnsafePointer<Void>, inputLen: size_t,
 			result: UnsafeMutablePointer<UInt64>) -> CCCryptorStatus
 		private static let CNCRC : CNCRCT? = getFunc(dl, f: "CNCRC")
+	}
+	
+	public class CMAC {
+		
+		public static func AESCMAC(data: NSData, key: NSData) -> NSData {
+			let result = NSMutableData(length: 16)!
+			CCAESCmac!(key: key.bytes,
+			           data: data.bytes, dataLen: data.length,
+			           macOut: result.mutableBytes)
+			return result
+		}
+		
+		public static func available() -> Bool {
+			return CCAESCmac != nil
+		}
+		
+		private typealias CCAESCmacT = @convention(c) (
+			key: UnsafePointer<Void>,
+			data: UnsafePointer<Void>, dataLen: size_t,
+			macOut: UnsafeMutablePointer<Void>) -> Void
+		private static let CCAESCmac : CCAESCmacT? = getFunc(dl, f: "CCAESCmac")
 	}
 	
 	public class KeyDerivation {

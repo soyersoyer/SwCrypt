@@ -62,6 +62,14 @@ CC.digest(data, alg: .SHA512)
 ```
 CC.HMAC(data, alg: .SHA512, key: key)
 ```
+### CMAC function
+```
+CC.CMAC.AESCMAC(input, key: key)
+```
+### CRC function
+```
+let output = try? CC.CRC.crc(input, mode: .CRC_32)
+```
 ### KeyDerivation
 ```
 CC.KeyDerivation.PBKDF2(password, salt: salt, prf: .SHA256, rounds: 4096)
@@ -156,7 +164,10 @@ let cryptorAvailable : Bool = CC.cryptorAvailable
 let keyDerivationAvailable : Bool = CC.KeyDerivation.available()
 let keyWrapAvailable : Bool = CC.KeyWrap.available()
 let rsaAvailable : Bool = CC.RSA.available()
+let dhAvailable : Bool = CC.DH.available()
 let ecAvailable : Bool = CC.EC.available()
+let crcAvailable : Bool = CC.CRC.available()
+let cmacAvailable : Bool = CC.CMAC.available()
 let gcmAvailable : Bool = CC.GCM.available()
 let ccmAvailable : Bool = CC.CCM.available()
 

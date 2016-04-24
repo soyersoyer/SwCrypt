@@ -268,4 +268,13 @@ class SwCryptTest: XCTestCase {
 		XCTAssert(output != nil)
 		XCTAssert(output == expectedOutput)
 	}
+	
+	func testCMAC() {
+		XCTAssert(CC.CMAC.available())
+		let input = "abcdefg".dataUsingEncoding(NSUTF8StringEncoding)!
+		let key = "8B142BB0FA0043C32821BB90A3453884".dataFromHexadecimalString()!
+		let expectedOutput = "a7903c21aaa33db4c8ad7b23a947e0bd".dataFromHexadecimalString()!
+		let cmac = CC.CMAC.AESCMAC(input, key: key)
+		XCTAssert(cmac == expectedOutput)
+	}
 }
