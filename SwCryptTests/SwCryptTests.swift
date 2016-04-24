@@ -259,4 +259,13 @@ class SwCryptTest: XCTestCase {
 		XCTAssert(common2 != nil)
 		XCTAssert(common1 == common2)
 	}
+	
+	func testCRC() {
+		XCTAssert(CC.CRC.available())
+		let input = "abcdefg".dataUsingEncoding(NSUTF8StringEncoding)!
+		let expectedOutput : UInt64 = 0x312A6AA6
+		let output = try? CC.CRC.crc(.CRC_32, input: input)
+		XCTAssert(output != nil)
+		XCTAssert(output == expectedOutput)
+	}
 }

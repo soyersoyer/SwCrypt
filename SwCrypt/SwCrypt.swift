@@ -982,6 +982,7 @@ public class CC {
 			RSA.available() &&
 			DH.available() &&
 			EC.available() &&
+			CRC.available() &&
 			GCM.available() &&
 			CCM.available()
 	}
@@ -1688,6 +1689,60 @@ public class CC {
 			outLen: UnsafeMutablePointer<size_t>) -> CCCryptorStatus
 		private static let CCECCryptorComputeSharedSecret : CCECCryptorComputeSharedSecretT? =
 			getFunc(dl, f: "CCECCryptorComputeSharedSecret")
+	}
+	
+	public class CRC {
+		
+		public typealias CNcrc = UInt32
+		public enum Mode : CNcrc {
+			case CRC_8 = 10,
+			CRC_8_ICODE = 11,
+			CRC_8_ITU = 12,
+			CRC_8_ROHC = 13,
+			CRC_8_WCDMA = 14,
+			CRC_16 = 20,
+			CRC_16_CCITT_TRUE = 21,
+			CRC_16_CCITT_FALSE = 22,
+			CRC_16_USB = 23,
+			CRC_16_XMODEM = 24,
+			CRC_16_DECT_R = 25,
+			CRC_16_DECT_X = 26,
+			CRC_16_ICODE = 27,
+			CRC_16_VERIFONE = 28,
+			CRC_16_A = 29,
+			CRC_16_B = 30,
+			CRC_16_Fletcher = 31,
+			CRC_32_Adler = 40,
+			CRC_32 = 41,
+			CRC_32_CASTAGNOLI = 42,
+			CRC_32_BZIP2 = 43,
+			CRC_32_MPEG_2 = 44,
+			CRC_32_POSIX = 45,
+			CRC_32_XFER = 46,
+			CRC_64_ECMA_182 = 60
+		}
+		
+		public static func crc(mode: Mode, input: NSData) throws -> UInt64 {
+			var result : UInt64 = 0
+			let status = CNCRC!(
+				algorithm: mode.rawValue,
+				input: input.bytes, inputLen: input.length,
+				result: &result)
+			guard status == noErr else {
+				throw CCError(status)
+			}
+			return result
+		}
+		
+		public static func available() -> Bool {
+			return CNCRC != nil
+		}
+		
+		private typealias CNCRCT = @convention(c) (
+			algorithm: CNcrc,
+			input: UnsafePointer<Void>, inputLen: size_t,
+			result: UnsafeMutablePointer<UInt64>) -> CCCryptorStatus
+		private static let CNCRC : CNCRCT? = getFunc(dl, f: "CNCRC")
 	}
 	
 	public class KeyDerivation {
