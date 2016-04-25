@@ -349,8 +349,7 @@ public class PEM {
 		}
 		
 		public static func toPEM(derKey: NSData) -> String {
-			let base64 = derKey.base64EncodedStringWithOptions(
-				[.Encoding64CharacterLineLength,.EncodingEndLineWithLineFeed])
+			let base64 = PEM.base64Encode(derKey)
 			return addRSAHeader(base64)
 		}
 		
@@ -386,8 +385,7 @@ public class PEM {
 		}
 		
 		public static func toPEM(derKey: NSData) -> String {
-			let base64 = derKey.base64EncodedStringWithOptions(
-				[.Encoding64CharacterLineLength,.EncodingEndLineWithLineFeed])
+			let base64 = PEM.base64Encode(derKey)
 			return addHeader(base64)
 		}
 		
@@ -448,9 +446,7 @@ public class PEM {
 		private static let AESHeaderLength = AESInfoLength + AESIVInHexLength
 	
 		private static func addEncryptHeader(key: NSData, iv: NSData, mode: EncMode) -> String {
-			return getHeader(mode) + iv.hexadecimalString() + "\n\n" +
-				key.base64EncodedStringWithOptions(
-					[.Encoding64CharacterLineLength,.EncodingEndLineWithLineFeed])
+			return getHeader(mode) + iv.hexadecimalString() + "\n\n" + PEM.base64Encode(key)
 		}
 		
 		private static func getHeader(mode: EncMode) -> String {
@@ -536,6 +532,11 @@ public class PEM {
 	
 	private static func base64Decode(base64Data: String) -> NSData? {
 		return NSData(base64EncodedString: base64Data, options: [.IgnoreUnknownCharacters])
+	}
+	
+	private static func base64Encode(key: NSData) -> String {
+		return key.base64EncodedStringWithOptions(
+			[.Encoding64CharacterLineLength,.EncodingEndLineWithLineFeed])
 	}
 	
 }
