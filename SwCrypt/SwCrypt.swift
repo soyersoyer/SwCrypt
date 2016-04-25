@@ -422,7 +422,7 @@ public class PEM {
 			guard let data = PEM.base64Decode(base64Data) else {
 				throw Error(.Base64Decode)
 			}
-			guard let decrypted = decryptKey(data, key: aesKey, iv: iv) else {
+			guard let decrypted = try? decryptKey(data, key: aesKey, iv: iv) else {
 				throw Error(.BadPassphrase)
 			}
 			guard PKCS8.PrivateKey.hasCorrectHeader(decrypted) else {
@@ -468,7 +468,7 @@ public class PEM {
 		
 		private static func getIV(strippedKey: String) -> NSData? {
 			let ivInHex = strippedKey.substringWithRange(strippedKey.startIndex+AESInfoLength..<strippedKey.startIndex+AESHeaderLength)
-			return  ivInHex.dataFromHexadecimalString()
+			return ivInHex.dataFromHexadecimalString()
 		}
 		
 		private static func getAESKey(mode: EncMode, passphrase: String, iv: NSData) -> NSData {
@@ -513,9 +513,10 @@ public class PEM {
 				data: data, key: key, iv: iv)
 		}
 		
-		private static func decryptKey(data: NSData, key: NSData, iv: NSData) -> NSData? {
-			return try? CC.crypt(.decrypt, blockMode: .CBC, algorithm: .AES, padding: .PKCS7Padding,
-			                     data: data, key: key, iv: iv)
+		private static func decryptKey(data: NSData, key: NSData, iv: NSData) throws -> NSData {
+			return try CC.crypt(
+				.decrypt, blockMode: .CBC, algorithm: .AES, padding: .PKCS7Padding,
+				data: data, key: key,iv: iv)
 		}
 		
 	}
@@ -613,7 +614,9 @@ public class SEM {
 		let aesKey = CC.generateRandom(mode.aes.keySize)
 		let iv = CC.generateRandom(mode.block.ivSize)
 		let header = getMessageHeader(mode, aesKey: aesKey, iv: iv)
-		let derKey = try publicPEMToDER(pemKey)
+		guard let derKey = try? SwKeyConvert.PublicKey.pemToPKCS1DER(pemKey) else {
+			throw Error(.InvalidKey)
+		}
 		
 		let encryptedHeader = encryptHeader(header, derKey: derKey)
 		let encryptedData = try! cryptAuth(.encrypt, blockMode: mode.block, data: data, aData: encryptedHeader, key: aesKey, iv: iv)
@@ -625,55 +628,63 @@ public class SEM {
 	
 	
 	public static func decryptData(data: NSData, pemKey: String) throws -> NSData {
-		let derKey = try privatePEMToDER(pemKey)
-		let (header, tail) =  try decryptHeader(data, derKey: derKey)
-		let (mode, aesKey, iv) = try parseMessageHeader(header)
-		
+		guard let derKey = try? SwKeyConvert.PrivateKey.pemToPKCS1DER(pemKey) else {
+			throw Error(.InvalidKey)
+		}
+		guard let (header, blockSize) = try? decryptHeader(data, derKey: derKey) else {
+			throw Error(.Decode)
+		}
 		let encryptedHeader = data.subdataWithRange(
-			NSRange(location:0, length: data.length - tail.length))
-		let encryptedData = tail
-		return try cryptAuth(.decrypt, blockMode: mode.block, data: encryptedData, aData: encryptedHeader, key: aesKey, iv: iv)
+			NSRange(location:0, length: blockSize))
+		let encryptedData = data.subdataWithRange(
+			NSRange(location: blockSize, length: data.length - blockSize))
+		
+		guard header.length >= 1 else {
+			throw Error(.Parse)
+		}
+		guard header[0] == 0 else {
+			throw Error(.UnsupportedVersion)
+		}
+		guard let (mode, aesKey, iv) = parseModeKeyIv(header) else {
+			throw Error(.Parse)
+		}
+		
+		guard let decrypted = try? cryptAuth(
+			.decrypt, blockMode: mode.block, data: encryptedData, aData: encryptedHeader,
+			key: aesKey, iv: iv) else {
+				throw Error(.Decode)
+		}
+		return decrypted
 	}
 	
 	private static func encryptHeader(data: NSData, derKey: NSData) -> NSData {
 		return try! CC.RSA.encrypt(data, derKey: derKey, tag: NSData(), padding: .OAEP, digest: .SHA1)
 	}
 	
-	private static func decryptHeader(data: NSData, derKey: NSData) throws -> (NSData, NSData) {
-		do {
-			let (header, blockSize) = try CC.RSA.decrypt(data, derKey: derKey,
-			                                             tag: NSData(), padding: .OAEP, digest: .SHA1)
-			
-			let tail = data.subdataWithRange(NSRange(location: blockSize, length: data.length - blockSize))
-			
-			return (header, tail)
-		}
-		catch _ as CC.CCError { throw Error(.Decode) }
+	private static func decryptHeader(data: NSData, derKey: NSData) throws -> (NSData, Int) {
+		return try CC.RSA.decrypt(data, derKey: derKey, tag: NSData(), padding: .OAEP, digest: .SHA1)
 	}
 	
 	private static func cryptAuth(opMode: CC.OpMode, blockMode: BlockMode, data: NSData, aData: NSData,
 	                      key: NSData, iv: NSData) throws -> NSData {
-		do {
-			if blockMode == .CBC_SHA256 {
-				return try cryptAuth(opMode, blockMode: .CBC, hmacAlg: .SHA256,
-				                     data: data, aData: aData, key: key, iv:iv)
-			}
-			else /* GCM */ {
-				return try CC.cryptAuth(opMode, blockMode: .GCM, algorithm: .AES,
-				                        data: data, aData: aData,
-				                        key: key, iv: iv, tagLength: 16)
-			}
+		if blockMode == .CBC_SHA256 {
+			return try cryptAuth(
+				opMode, blockMode: .CBC, hmacAlg: .SHA256, data: data, aData: aData, key: key, iv:iv)
 		}
-		catch _ as CC.CCError { throw Error(.Decode) }
+		else /* GCM */ {
+			return try CC.cryptAuth(
+				opMode, blockMode: .GCM, algorithm: .AES, data: data, aData: aData, key: key, iv: iv,
+				tagLength: 16)
+		}
 	}
 	
 	private static func cryptAuth(opMode: CC.OpMode, blockMode: CC.BlockMode, hmacAlg: CC.HMACAlg,
 	                      data: NSData, aData: NSData, key: NSData, iv:NSData) throws -> NSData {
 		if opMode == .encrypt {
 			//encrypt then mac
-			let encryptedData = try! CC.crypt(.encrypt, blockMode: blockMode,
-			                                 algorithm: .AES, padding: .PKCS7Padding,
-			                                 data: data, key: key, iv: iv)
+			let encryptedData = try! CC.crypt(
+				.encrypt, blockMode: blockMode, algorithm: .AES, padding: .PKCS7Padding,
+				data: data, key: key, iv: iv)
 			let macData = NSMutableData(data: aData)
 			macData.appendData(encryptedData)
 			let hmac = CC.HMAC(macData, alg: hmacAlg, key: key)
@@ -682,63 +693,51 @@ public class SEM {
 			return result
 		}
 		else {
-			let encryptedData = data.subdataWithRange(NSRange(location:0, length: data.length - hmacAlg.digestLength))
+			let encryptedData = data.subdataWithRange(NSRange(
+				location:0, length: data.length - hmacAlg.digestLength))
 			let macData = NSMutableData(data: aData)
 			macData.appendData(encryptedData)
 			
-			let hmac = data.subdataWithRange(NSRange(location: data.length - hmacAlg.digestLength, length: hmacAlg.digestLength))
+			let hmac = data.subdataWithRange(NSRange(
+				location: data.length - hmacAlg.digestLength, length: hmacAlg.digestLength))
 			
 			guard CC.HMAC(macData, alg: hmacAlg, key: key) == hmac else {
 				throw CC.CCError(.DecodeError)
 			}
-			return try CC.crypt(.decrypt, blockMode: blockMode,
-			                                 algorithm: .AES, padding: .PKCS7Padding,
-			                                 data: encryptedData, key: key, iv: iv)
+			return try CC.crypt(
+				.decrypt, blockMode: blockMode, algorithm: .AES, padding: .PKCS7Padding,
+				data: encryptedData, key: key, iv: iv)
 		}
 	}
 	
 	private static func getMessageHeader(mode: Mode, aesKey: NSData, iv: NSData) -> NSData {
-		let header : [UInt8] = [mode.version, mode.aes.rawValue, mode.block.rawValue]
-		let message = NSMutableData(bytes: header, length: 3)
-		message.appendData(aesKey)
-		message.appendData(iv)
-		return message
+		let modeData : [UInt8] = [mode.version, mode.aes.rawValue, mode.block.rawValue]
+		let header = NSMutableData(bytes: modeData, length: modeData.count)
+		header.appendData(aesKey)
+		header.appendData(iv)
+		return header
 	}
 	
-	private static func parseMessageHeader(header: NSData) throws -> (Mode, NSData, NSData) {
-		guard header.length > 3 else {
-			throw Error(.Parse)
+	private static func parseModeKeyIv(header: NSData) -> (Mode, NSData, NSData)? {
+		let modeLength = 3
+		guard header.length > modeLength else {
+			return nil
 		}
-		let bytes = header.arrayOfBytes()
-		let version = bytes[0]
-		guard version == 0 else {
-			throw Error(.UnsupportedVersion)
+		guard let aes = AESMode(rawValue: header[1]) else {
+			return nil
 		}
-		guard let aes = AESMode(rawValue: bytes[1]) else {
-			throw Error(.Parse)
-		}
-		guard let block = BlockMode(rawValue: bytes[2]) else {
-			throw Error(.Parse)
+		guard let block = BlockMode(rawValue: header[2]) else {
+			return nil
 		}
 		let keySize = aes.keySize
 		let ivSize = block.ivSize
-		guard header.length == 3 + keySize + ivSize else {
-			throw Error(.Parse)
+		guard header.length == modeLength + keySize + ivSize else {
+			return nil
 		}
-		let key = header.subdataWithRange(NSRange(location: 3, length: keySize))
-		let iv = header.subdataWithRange(NSRange(location: 3 + keySize, length: ivSize))
+		let key = header.subdataWithRange(NSRange(location: modeLength, length: keySize))
+		let iv = header.subdataWithRange(NSRange(location: modeLength + keySize, length: ivSize))
 		
 		return (Mode(aes: aes, block: block), key, iv)
-	}
-	
-	private static func privatePEMToDER(pemKey: String) throws -> NSData {
-		do { return try SwKeyConvert.PrivateKey.pemToPKCS1DER(pemKey) }
-		catch { throw Error(.InvalidKey) }
-	}
-	
-	private static func publicPEMToDER(pemKey: String) throws -> NSData {
-		do { return try SwKeyConvert.PublicKey.pemToPKCS1DER(pemKey) }
-		catch { throw Error(.InvalidKey) }
 	}
 	
 }
@@ -762,7 +761,9 @@ public class SMSV {
 	}
 	
 	public static func signData(data: NSData, pemKey: String) throws -> NSData {
-		let derKey = try privatePEMToDER(pemKey)
+		guard let derKey = try? SwKeyConvert.PrivateKey.pemToPKCS1DER(pemKey) else {
+			throw Error(.InvalidKey)
+		}
 		let hash = CC.digest(data, alg: .SHA512)
 		return try! CC.RSA.sign(hash, derKey: derKey, padding: .OAEP, digest: .SHA512)
 	}
@@ -776,20 +777,12 @@ public class SMSV {
 	}
 	
 	public static func verifyData(data: NSData, pemKey: String, signData: NSData) throws -> Bool {
-		let derKey = try publicPEMToDER(pemKey)
+		guard let derKey = try? SwKeyConvert.PublicKey.pemToPKCS1DER(pemKey) else {
+			throw Error(.InvalidKey)
+		}
 		let hash = CC.digest(data, alg: .SHA512)
 		return try! CC.RSA.verify(
 			hash, derKey: derKey, padding: .OAEP, digest: .SHA512, signedData: signData)
-	}
-	
-	private static func privatePEMToDER(pemKey: String) throws -> NSData {
-		do { return try SwKeyConvert.PrivateKey.pemToPKCS1DER(pemKey) }
-		catch { throw Error(.InvalidKey) }
-	}
-	
-	private static func publicPEMToDER(pemKey: String) throws -> NSData {
-		do { return try SwKeyConvert.PublicKey.pemToPKCS1DER(pemKey) }
-		catch { throw Error(.InvalidKey) }
 	}
 }
 
@@ -1932,6 +1925,10 @@ extension NSData {
 		var bytesArray = [UInt8](count: count, repeatedValue: 0)
 		self.getBytes(&bytesArray, length:count * sizeof(UInt8))
 		return bytesArray
+	}
+	
+	private subscript (position: Int) -> UInt8 {
+		return UnsafePointer<UInt8>(self.bytes)[position]
 	}
 }
 
