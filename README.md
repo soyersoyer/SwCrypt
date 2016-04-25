@@ -30,7 +30,8 @@ try CC.RSA.decrypt(data, derKey: privateKey, tag: tag, padding: .OAEP, digest: .
 let keys = try? CC.EC.generateKeyPair(384)
 let signed = try? CC.EC.signHash(keys!.0, hash: hash)
 let verified = try? CC.EC.verifyHash(keys!.1, hash: hash, signedData: signed!)
-let shared = try? CC.EC.computeSharedSecret(keys!.0, publicKey: keys!.1)
+
+let shared = try? CC.EC.computeSharedSecret(keys!.0, publicKey: partnerPubKey)
 ```
 ### Diffie-Hellman functions
 ```

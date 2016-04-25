@@ -234,11 +234,16 @@ class SwCryptTest: XCTestCase {
 	}
 
 	func testECSharedSecret() {
-		let keys = try? CC.EC.generateKeyPair(256)
-		XCTAssert(keys != nil)
-		
-		let shared = try? CC.EC.computeSharedSecret(keys!.0, publicKey: keys!.1)
-		XCTAssert(shared != nil)
+		let keys1 = try? CC.EC.generateKeyPair(384)
+		XCTAssert(keys1 != nil)
+		let keys2 = try? CC.EC.generateKeyPair(384)
+		XCTAssert(keys2 != nil)
+
+		let shared1 = try? CC.EC.computeSharedSecret(keys1!.0, publicKey: keys2!.1)
+		XCTAssert(shared1 != nil)
+		let shared2 = try? CC.EC.computeSharedSecret(keys2!.0, publicKey: keys1!.1)
+		XCTAssert(shared2 != nil)
+		XCTAssert(shared1! == shared2!)
 	}
 	
 	func testDH() {
