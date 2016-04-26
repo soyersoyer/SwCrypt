@@ -89,11 +89,13 @@ public class SwKeyConvert {
 	public class PrivateKey {
 	
 		public static func pemToPKCS1DER(pemKey: String) throws -> NSData {
-			do {
-				let derKey = try PEM.PrivateKey.toDER(pemKey)
-				return try PKCS8.PrivateKey.stripHeaderIfAny(derKey)
+			guard let derKey = try? PEM.PrivateKey.toDER(pemKey) else {
+				throw Error(.InvalidKey)
 			}
-			catch { throw Error(.InvalidKey) }
+			guard let pkcs1DERKey = PKCS8.PrivateKey.stripHeaderIfAny(derKey) else {
+				throw Error(.InvalidKey)
+			}
+			return pkcs1DERKey
 		}
 		
 		public static func derToPKCS1PEM(derKey: NSData) -> String {
@@ -123,11 +125,13 @@ public class SwKeyConvert {
 	public class PublicKey {
 	
 		public static func pemToPKCS1DER(pemKey: String) throws -> NSData {
-			do {
-				let derKey = try PEM.PublicKey.toDER(pemKey)
-				return try PKCS8.PublicKey.stripHeaderIfAny(derKey)
+			guard let derKey = try? PEM.PublicKey.toDER(pemKey) else {
+				throw Error(.InvalidKey)
 			}
-			catch { throw Error(.InvalidKey) }
+			guard let pkcs1DERKey = PKCS8.PublicKey.stripHeaderIfAny(derKey) else {
+				throw Error(.InvalidKey)
+			}
+			return pkcs1DERKey
 		}
 	
 		public static func derToPKCS1PEM(derKey: NSData) -> String {
@@ -145,74 +149,73 @@ public class SwKeyConvert {
 
 public class PKCS8 {
 	
-	public enum Error : ErrorType {
-		case ASN1Parse
-		case OIDMismatch
-		init(_ type: Error, function: String = #function, file: String = #file, line: Int = #line) {
-			self = type
-			print("\(file):\(line): [\(function)] \(self._domain): \(self)")
-		}
-	}
-	
 	public class PrivateKey {
 		
 		//https://lapo.it/asn1js/
-		public static func stripHeaderIfAny(derKey: NSData) throws -> NSData {
+		public static func getPKCS1DEROffset(derKey: NSData) -> Int? {
 			let bytes = derKey.bytesView
 			
 			var offset = 0
-			guard bytes.length > offset else { throw Error(.ASN1Parse) }
-			guard bytes[offset] == 0x30 else { throw Error(.ASN1Parse) }
+			guard bytes.length > offset else { return nil }
+			guard bytes[offset] == 0x30 else { return nil }
 			
 			offset += 1
 			
-			guard bytes.length > offset else { throw Error(.ASN1Parse) }
+			guard bytes.length > offset else { return nil }
 			if bytes[offset] > 0x80 {
 				offset += Int(bytes[offset]) - 0x80
 			}
 			offset += 1
 			
-			guard bytes.length > offset else { throw Error(.ASN1Parse) }
-			guard bytes[offset] == 0x02 else { throw Error(.ASN1Parse) }
+			guard bytes.length > offset else { return nil }
+			guard bytes[offset] == 0x02 else { return nil }
 			
 			offset += 3
 			
 			//without PKCS8 header
-			guard bytes.length > offset else { throw Error(.ASN1Parse) }
+			guard bytes.length > offset else { return nil }
 			if bytes[offset] == 0x02 {
-				return derKey
+				return 0
 			}
 			
 			let OID: [UInt8] = [0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
 			                    0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00]
 			
-			guard bytes.length > offset + OID.count else { throw Error(.ASN1Parse) }
-			let slice: [UInt8] = Array(bytes[offset..<(offset + OID.count)])
+			guard bytes.length > offset + OID.count else { return nil }
+			let slice = derKey.bytesViewRange(NSRange(location: offset, length: OID.count))
 			
-			guard slice == OID else { throw Error(.OIDMismatch) }
+			guard OID.elementsEqual(slice) else { return nil }
 			
 			offset += OID.count
 			
-			guard bytes.length > offset else { throw Error(.ASN1Parse) }
-			guard bytes[offset] == 0x04 else { throw Error(.ASN1Parse) }
+			guard bytes.length > offset else { return nil }
+			guard bytes[offset] == 0x04 else { return nil }
 			
 			offset += 1
 
-			guard bytes.length > offset else { throw Error(.ASN1Parse) }
+			guard bytes.length > offset else { return nil }
 			if bytes[offset] > 0x80 {
 				offset += Int(bytes[offset]) - 0x80
 			}
 			offset += 1
 			
-			guard bytes.length > offset else { throw Error(.ASN1Parse) }
-			guard bytes[offset] == 0x30 else { throw Error(.ASN1Parse) }
+			guard bytes.length > offset else { return nil }
+			guard bytes[offset] == 0x30 else { return nil }
 			
+			return offset
+		}
+		
+		public static func stripHeaderIfAny(derKey: NSData) -> NSData? {
+			guard let offset = getPKCS1DEROffset(derKey) else {
+				return nil
+			}
 			return derKey.subdataWithRange(NSRange(location: offset, length: derKey.length - offset))
 		}
 		
 		public static func hasCorrectHeader(derKey: NSData) -> Bool {
-			return (try? stripHeaderIfAny(derKey)) != nil
+			return getPKCS1DEROffset(derKey) != nil
 		}
+		
 	}
 	
 	public class PublicKey {
@@ -249,60 +252,67 @@ public class PKCS8 {
 		}
 		
 		//https://lapo.it/asn1js/
-		public static func stripHeaderIfAny(derKey: NSData) throws -> NSData {
+		public static func getPKCS1DEROffset(derKey: NSData) -> Int? {
 			let bytes = derKey.bytesView
 			
 			var offset = 0
-			guard bytes.length > offset else { throw Error(.ASN1Parse) }
-			guard bytes[offset] == 0x30 else { throw Error(.ASN1Parse) }
+			guard bytes.length > offset else { return nil }
+			guard bytes[offset] == 0x30 else { return nil }
 			
 			offset += 1
 			
-			guard bytes.length > offset else { throw Error(.ASN1Parse) }
+			guard bytes.length > offset else { return nil }
 			if bytes[offset] > 0x80 {
 				offset += Int(bytes[offset]) - 0x80
 			}
 			offset += 1
 			
 			//without PKCS8 header
-			guard bytes.length > offset else { throw Error(.ASN1Parse) }
+			guard bytes.length > offset else { return nil }
 			if bytes[offset] == 0x02 {
-				return derKey
+				return 0
 			}
 			
 			let OID: [UInt8] = [0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
 			                    0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00]
 			
-			guard bytes.length > offset + OID.count else { throw Error(.ASN1Parse) }
-			let slice: [UInt8] = Array(bytes[offset..<(offset + OID.count)])
+			guard bytes.length > offset + OID.count else { return nil }
+			let slice = derKey.bytesViewRange(NSRange(location: offset, length: OID.count))
 			
-			guard slice == OID else { throw Error(.OIDMismatch) }
-			
+			guard OID.elementsEqual(slice) else { return nil }
 			offset += OID.count
 			
 			// Type
-			guard bytes.length > offset else { throw Error(.ASN1Parse) }
-			guard bytes[offset] == 0x03 else { throw Error(.ASN1Parse) }
+			guard bytes.length > offset else { return nil }
+			guard bytes[offset] == 0x03 else { return nil }
 			
 			offset += 1
 			
-			guard bytes.length > offset else { throw Error(.ASN1Parse) }
+			guard bytes.length > offset else { return nil }
 			if bytes[offset] > 0x80 {
 				offset += Int(bytes[offset]) - 0x80
 			}
 			offset += 1
 			
 			// Contents should be separated by a null from the header
-			guard bytes.length > offset else { throw Error(.ASN1Parse) }
-			guard bytes[offset] == 0x00 else { throw Error(.ASN1Parse) }
+			guard bytes.length > offset else { return nil }
+			guard bytes[offset] == 0x00 else { return nil }
 			
 			offset += 1
-			guard derKey.length > offset else { throw Error(.ASN1Parse) }
+			guard bytes.length > offset else { return nil }
+			
+			return offset
+		}
+		
+		public static func stripHeaderIfAny(derKey: NSData) -> NSData? {
+			guard let offset = getPKCS1DEROffset(derKey) else {
+				return nil
+			}
 			return derKey.subdataWithRange(NSRange(location: offset, length: derKey.length - offset))
 		}
 		
 		public static func hasCorrectHeader(derKey: NSData) -> Bool {
-			return (try? stripHeaderIfAny(derKey)) != nil
+			return getPKCS1DEROffset(derKey) != nil
 		}
 		
 		private static func encodedOctets(int: Int) -> [UInt8] {
@@ -1928,10 +1938,24 @@ extension NSData {
 	
 	private var bytesView: BytesView { return BytesView(self) }
 	
+	private func bytesViewRange(range: NSRange) -> BytesView {
+		return BytesView(self, range: range)
+	}
+	
 	private struct BytesView: CollectionType {
 		// The view retains the NSData. That's on purpose. NSData doesn't retain the view, so there's no loop.
 		let data: NSData
-		init(_ data: NSData) { self.data = data }
+		init(_ data: NSData) {
+			self.data = data
+			self.startIndex = 0
+			self.endIndex = data.length
+		}
+		
+		init(_ data: NSData, range: NSRange ) {
+			self.data = data
+			self.startIndex = range.location
+			self.endIndex = range.location + range.length
+		}
 		
 		subscript (position: Int) -> UInt8 {
 			return UnsafePointer<UInt8>(data.bytes)[position]
@@ -1939,9 +1963,9 @@ extension NSData {
 		subscript (bounds: Range<Int>) -> NSData {
 			return data.subdataWithRange(NSRange(bounds))
 		}
-		var startIndex: Int = 0
-		var endIndex: Int { return data.length }
-		var length: Int { return data.length }
+		var startIndex: Int
+		var endIndex: Int
+		var length: Int { return endIndex - startIndex }
 	}
 }
 
