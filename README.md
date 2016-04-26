@@ -1,3 +1,5 @@
+[![Carthage compatible](https://img.shields.io/badge/Carthage-compatible-4BC51D.svg?style=flat)](https://github.com/Carthage/Carthage)
+
 SwCrypt
 =========
 
@@ -174,7 +176,7 @@ let ccAvailable : Bool = CC.available()
 
 Install
 -------
-Just copy `SwCrypt.swift` to your project.
+Just copy [SwCrypt.swift](https://github.com/soyersoyer/SwCrypt/blob/master/SwCrypt/SwCrypt.swift) to your project or use the [Carthage](https://github.com/Carthage/Carthage) dependency manager.
 
 Inspired from
 -------------
