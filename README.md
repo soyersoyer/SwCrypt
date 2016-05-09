@@ -19,13 +19,13 @@ let publicKeyDER = SwKeyConvert.PublicKey.pemToPKCS1DER(publicKeyPEM)
 ```
 ### Or encrypt, decrypt the private key (OpenSSL compatible)
 ```
-try SwKeyConvert.PrivateKey.encryptPEM(privateKeyPEM, passphrase: "longpassword", mode: .AES256CBC)
+try SwKeyConvert.PrivateKey.encryptPEM(privateKeyPEM, passphrase: "longpassword", mode: .aes256CBC)
 try SwKeyConvert.PrivateKey.decryptPEM(privEncrypted, passphrase: "longpassword")
 ```
 ### Encrypt, decrypt data with RSA
 ```
-try CC.RSA.encrypt(data, derKey: publicKey, tag: tag, padding: .OAEP, digest: .SHA1)
-try CC.RSA.decrypt(data, derKey: privateKey, tag: tag, padding: .OAEP, digest: .SHA1)
+try CC.RSA.encrypt(data, derKey: publicKey, tag: tag, padding: .oaep, digest: .sha1)
+try CC.RSA.decrypt(data, derKey: privateKey, tag: tag, padding: .oaep, digest: .sha1)
 ```
 ### Elliptic curve functions
 ```
@@ -43,23 +43,23 @@ let commonKey = try dh.computeKey(partnerPubKey!)
 ```
 ### Encrypt, decrypt data with symmetric ciphers
 ```
-try CC.crypt(.encrypt, blockMode: .CBC, algorithm: .AES, padding: .PKCS7Padding, data: data, key: aesKey, iv: iv)
-try CC.crypt(.decrypt, blockMode: .CFB, algorithm: .AES, padding: .PKCS7Padding, data: data, key: aesKey, iv: iv)
+try CC.crypt(.encrypt, blockMode: .cbc, algorithm: .aes, padding: .pkcs7Padding, data: data, key: aesKey, iv: iv)
+try CC.crypt(.decrypt, blockMode: .cfb, algorithm: .aes, padding: .pkcs7Padding, data: data, key: aesKey, iv: iv)
 ```
 ### Encrypt, decrypt data with symmetric authenticating ciphers
 ```
-try CC.cryptAuth(.encrypt, blockMode: .GCM, algorithm: .AES, data: data, aData: aData, key: aesKey, iv: iv, tagLength: tagLength)
-try CC.cryptAuth(.decrypt, blockMode: .CCM, algorithm: .AES, data: data, aData: aData, key: aesKey, iv: iv, tagLength: tagLength)
+try CC.cryptAuth(.encrypt, blockMode: .gcm, algorithm: .aes, data: data, aData: aData, key: aesKey, iv: iv, tagLength: tagLength)
+try CC.cryptAuth(.decrypt, blockMode: .ccm, algorithm: .aes, data: data, aData: aData, key: aesKey, iv: iv, tagLength: tagLength)
 ```
 ### Digest functions
 ```
-CC.digest(data, alg: .MD5)
-CC.digest(data, alg: .SHA256)
-CC.digest(data, alg: .SHA512)
+CC.digest(data, alg: .md5)
+CC.digest(data, alg: .sha256)
+CC.digest(data, alg: .sha512)
 ```
 ### HMAC function
 ```
-CC.HMAC(data, alg: .SHA512, key: key)
+CC.HMAC(data, alg: .sha512, key: key)
 ```
 ### CMAC function
 ```
@@ -67,16 +67,16 @@ CC.CMAC.AESCMAC(input, key: key)
 ```
 ### CRC function
 ```
-let output = try? CC.CRC.crc(input, mode: .CRC_32)
+let output = try? CC.CRC.crc(input, mode: .crc32)
 ```
 ### KeyDerivation
 ```
-CC.KeyDerivation.PBKDF2(password, salt: salt, prf: .SHA256, rounds: 4096)
+CC.KeyDerivation.PBKDF2(password, salt: salt, prf: .sha256, rounds: 4096)
 ```
 ### Symmetric Key Wrapping
 ```
-try CC.KeyWrap.SymmetricKeyWrap(CC.KeyWrap.rfc3394_iv, kek: kek, rawKey: rawKey)
-try CC.KeyWrap.SymmetricKeyUnwrap(CC.KeyWrap.rfc3394_iv, kek: kek, wrappedKey: wrappedKey)
+try CC.KeyWrap.SymmetricKeyWrap(CC.KeyWrap.rfc3394IV, kek: kek, rawKey: rawKey)
+try CC.KeyWrap.SymmetricKeyUnwrap(CC.KeyWrap.rfc3394IV, kek: kek, wrappedKey: wrappedKey)
 ```
 ### Upsert, get, delete keys from KeyStore
 ```
@@ -88,10 +88,10 @@ try SwKeyStore.delKey("priv")
 ### Encrypt/decrypt message in SEM (Simple Encrypted Message) format
 (works with OpenSSL PEM formatted keys too)
 ```
-//public enum AESMode : UInt8 {case AES128, AES192, AES256}
-//public enum BlockMode : UInt8 {case CBC_SHA256, GCM}
+//public enum AESMode : UInt8 {case aes128, aes192, aes256}
+//public enum BlockMode : UInt8 {case cbcSHA256, gcm}
 
-let mode = SEM.Mode(aes:.AES256, block:.CBC_SHA256)
+let mode = SEM.Mode(aes:.aes256, block:.cbcSHA256)
 try SEM.encryptMessage(testMessage, pemKey: publicKey, mode: mode)
 try SEM.decryptMessage(encMessage, pemKey: privateKey)
 try SEM.encryptData(testData, pemKey: publicKey, mode: mode)
