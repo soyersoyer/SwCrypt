@@ -2,7 +2,7 @@ import Foundation
 
 public class SwKeyStore {
 
-	enum SecError: OSStatus, ErrorType {
+	public enum SecError: OSStatus, ErrorType {
 		case unimplemented = -4
 		case param = -50
 		case allocate = -108
@@ -12,13 +12,20 @@ public class SwKeyStore {
 		case itemNotFound = -25300
 		case interactionNotAllowed = -25308
 		case decode = -26275
+
+		public static var debugLevel = 1
+
 		init(_ status: OSStatus, function: String = #function, file: String = #file, line: Int = #line) {
 			self = SecError(rawValue: status)!
-			print("\(file):\(line): [\(function)] \(self._domain): \(self) (\(self.rawValue))")
+			if SecError.debugLevel > 0 {
+				print("\(file):\(line): [\(function)] \(self._domain): \(self) (\(self.rawValue))")
+			}
 		}
 		init(_ type: SecError, function: String = #function, file: String = #file, line: Int = #line) {
 			self = type
-			print("\(file):\(line): [\(function)] \(self._domain): \(self) (\(self.rawValue))")
+			if SecError.debugLevel > 0 {
+				print("\(file):\(line): [\(function)] \(self._domain): \(self) (\(self.rawValue))")
+			}
 		}
 	}
 
@@ -80,9 +87,15 @@ public class SwKeyConvert {
 	public enum Error: ErrorType {
 		case invalidKey
 		case badPassphrase
+		case keyNotEncrypted
+
+		public static var debugLevel = 1
+
 		init(_ type: Error, function: String = #function, file: String = #file, line: Int = #line) {
 			self = type
-			print("\(file):\(line): [\(function)] \(self._domain): \(self)")
+			if Error.debugLevel > 0 {
+				print("\(file):\(line): [\(function)] \(self._domain): \(self)")
+			}
 		}
 	}
 
@@ -120,6 +133,8 @@ public class SwKeyConvert {
 				return PEM.PrivateKey.toPEM(derKey)
 			} catch PEM.Error.badPassphrase {
 				throw Error(.badPassphrase)
+			} catch PEM.Error.keyNotEncrypted {
+				throw Error(.keyNotEncrypted)
 			} catch {
 				throw Error(.invalidKey)
 			}
@@ -343,14 +358,17 @@ public class PKCS8 {
 public class PEM {
 
 	public enum Error: ErrorType {
-		case headerParse
-		case base64Decode
-		case encModeParse
-		case ivParse
+		case parse(String)
 		case badPassphrase
+		case keyNotEncrypted
+
+		public static var debugLevel = 1
+
 		init(_ type: Error, function: String = #function, file: String = #file, line: Int = #line) {
 			self = type
-			print("\(file):\(line): [\(function)] \(self._domain): \(self)")
+			if Error.debugLevel > 0 {
+				print("\(file):\(line): [\(function)] \(self._domain): \(self)")
+			}
 		}
 	}
 
@@ -358,10 +376,10 @@ public class PEM {
 
 		public static func toDER(pemKey: String) throws -> NSData {
 			guard let strippedKey = stripHeader(pemKey) else {
-				throw Error(.headerParse)
+				throw Error(.parse("header"))
 			}
 			guard let data = PEM.base64Decode(strippedKey) else {
-				throw Error(.base64Decode)
+				throw Error(.parse("base64decode"))
 			}
 			return data
 		}
@@ -394,10 +412,10 @@ public class PEM {
 
 		public static func toDER(pemKey: String) throws -> NSData {
 			guard let strippedKey = stripHeader(pemKey) else {
-				throw Error(.headerParse)
+				throw Error(.parse("header"))
 			}
 			guard let data = PEM.base64Decode(strippedKey) else {
-				throw Error(.base64Decode)
+				throw Error(.parse("base64decode"))
 			}
 			return data
 		}
@@ -427,18 +445,18 @@ public class PEM {
 
 		public static func toDER(pemKey: String, passphrase: String) throws -> NSData {
 			guard let strippedKey = PrivateKey.stripHeader(pemKey) else {
-				throw Error(.headerParse)
+				throw Error(.parse("header"))
 			}
 			guard let mode = getEncMode(strippedKey) else {
-				throw Error(.encModeParse)
+				throw Error(.keyNotEncrypted)
 			}
 			guard let iv = getIV(strippedKey) else {
-				throw Error(.ivParse)
+				throw Error(.parse("iv"))
 			}
 			let aesKey = getAESKey(mode, passphrase: passphrase, iv: iv)
 			let base64Data = strippedKey.substringFromIndex(strippedKey.startIndex + aesHeaderLength)
 			guard let data = PEM.base64Decode(base64Data) else {
-				throw Error(.base64Decode)
+				throw Error(.parse("base64decode"))
 			}
 			guard let decrypted = try? decryptKey(data, key: aesKey, iv: iv) else {
 				throw Error(.badPassphrase)
@@ -569,9 +587,14 @@ public class SEM {
 		case unsupportedVersion
 		case invalidKey
 		case decode
+
+		public static var debugLevel = 1
+
 		init(_ type: Error, function: String = #function, file: String = #file, line: Int = #line) {
 			self = type
-			print("\(file):\(line): [\(function)] \(self._domain): \(self)")
+			if Error.debugLevel > 0 {
+				print("\(file):\(line): [\(function)] \(self._domain): \(self)")
+			}
 		}
 	}
 
@@ -761,9 +784,14 @@ public class SMSV {
 	public enum Error: ErrorType {
 		case invalidKey
 		case parseMessage
+
+		public static var debugLevel = 1
+
 		init(_ type: Error, function: String = #function, file: String = #file, line: Int = #line) {
 			self = type
-			print("\(file):\(line): [\(function)] \(self._domain): \(self)")
+			if Error.debugLevel > 0 {
+				print("\(file):\(line): [\(function)] \(self._domain): \(self)")
+			}
 		}
 	}
 
@@ -812,14 +840,21 @@ public class CC {
 		case unimplemented = -4305
 		case overflow = -4306
 		case rngFailure = -4307
+
+		public static var debugLevel = 1
+
 		init(_ status: CCCryptorStatus, function: String = #function,
 		       file: String = #file, line: Int = #line) {
 			self = CCError(rawValue: status)!
-			print("\(file):\(line): [\(function)] \(self._domain): \(self) (\(self.rawValue))")
+			if CCError.debugLevel > 0 {
+				print("\(file):\(line): [\(function)] \(self._domain): \(self) (\(self.rawValue))")
+			}
 		}
 		init(_ type: CCError, function: String = #function, file: String = #file, line: Int = #line) {
 			self = type
-			print("\(file):\(line): [\(function)] \(self._domain): \(self) (\(self.rawValue))")
+			if CCError.debugLevel > 0 {
+				print("\(file):\(line): [\(function)] \(self._domain): \(self) (\(self.rawValue))")
+			}
 		}
 	}
 

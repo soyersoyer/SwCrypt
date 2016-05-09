@@ -93,6 +93,23 @@ class SwCryptTest: XCTestCase {
 		encryptKey(.aes256CBC)
 	}
 
+	func testKeyNotEncrypted() {
+		let bundle = NSBundle(forClass: self.dynamicType)
+		let decPEM = bundle.objectForInfoDictionaryKey("testPrivDecryptedPEM") as! String
+		XCTAssertThrowsError(try SwKeyConvert.PrivateKey.decryptPEM(decPEM, passphrase: "hello")) {
+			XCTAssert($0 as? SwKeyConvert.Error == SwKeyConvert.Error.keyNotEncrypted)
+		}
+	}
+
+	func testKeyInvalid() {
+		let bundle = NSBundle(forClass: self.dynamicType)
+		var decPEM = bundle.objectForInfoDictionaryKey("testPrivDecryptedPEM") as! String
+		decPEM = "a" + decPEM
+		XCTAssertThrowsError(try SwKeyConvert.PrivateKey.decryptPEM(decPEM, passphrase: "hello")) {
+			XCTAssert($0 as? SwKeyConvert.Error == SwKeyConvert.Error.invalidKey)
+		}
+	}
+
 	func decryptOpenSSLKeys(type: String) {
 		let bundle = NSBundle(forClass: self.dynamicType)
 		let encPEM = bundle.objectForInfoDictionaryKey("testPrivEncryptedPEMAES" + type) as! String
