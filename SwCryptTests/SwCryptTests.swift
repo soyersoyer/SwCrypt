@@ -4,12 +4,12 @@ import SwCrypt
 let keyPair = try? SwCryptTest.createKeyPair(2048)
 
 class SwCryptTest: XCTestCase {
-	
+
     override func setUp() {
         super.setUp()
 		self.continueAfterFailure = false
     }
-    
+
     override func tearDown() {
         super.tearDown()
     }
@@ -20,7 +20,7 @@ class SwCryptTest: XCTestCase {
 		let pubKey = SwKeyConvert.PublicKey.derToPKCS1PEM(keyPair.1)
 		return (privKey, pubKey)
 	}
-	
+
 	func testAvailable() {
 		XCTAssert(CC.digestAvailable())
 		XCTAssert(CC.randomAvailable())
@@ -30,40 +30,45 @@ class SwCryptTest: XCTestCase {
 		XCTAssert(CC.GCM.available())
 		XCTAssert(CC.available())
 	}
-	
+
 	func testDigest() {
 		XCTAssert(CC.digestAvailable())
 		let testData = "rokafogtacsuka".dataUsingEncoding(NSUTF8StringEncoding)!
 		let sha1 = "9e421ffa8b2c83ac23e96bc9f9302f4a16311037".dataFromHexadecimalString()!
-		let sha256 = "ae6ab1cf65971f88b9cd92c2f334d6a99beaf5b40240d4b440fdb4a1231db0f0".dataFromHexadecimalString()!
-		let sha384 = "acf011a346e96364091bd21415a2437273c7f3c84060b21ac19f2eafa1c6cde76467b0b0aba99626b18aa3da83e442db".dataFromHexadecimalString()!
-		let sha512 = "016748fad47ddfba4fcd19aacc67ee031dfef40f5e9692c84f8846e520f2a827a4ea5035af8a66686c60796a362c30e6c473cfdbb9d86f43312001fc0b660734".dataFromHexadecimalString()!
-		let sha224 = "ec92519bb9e82a79097b0dd0618927b3262a70d6f02bd667c413009e".dataFromHexadecimalString()!
+		let sha256 = "ae6ab1cf65971f88b9cd92c2f334d6a99beaf5b40240d4b440fdb4a1231db0f0"
+			.dataFromHexadecimalString()!
+		let sha384 = ("acf011a346e96364091bd21415a2437273c7f3c84060b21ac19f2eafa1c6cde76467b0b0" +
+			"aba99626b18aa3da83e442db").dataFromHexadecimalString()!
+		let sha512 = ("016748fad47ddfba4fcd19aacc67ee031dfef40f5e9692c84f8846e520f2a827a4ea5035" +
+			"af8a66686c60796a362c30e6c473cfdbb9d86f43312001fc0b660734").dataFromHexadecimalString()!
+		let sha224 = "ec92519bb9e82a79097b0dd0618927b3262a70d6f02bd667c413009e"
+			.dataFromHexadecimalString()!
 		let md5 = "9b43f853613732cfc8531ed6bcbf6d68".dataFromHexadecimalString()!
-		XCTAssert(CC.digest(testData, alg: .SHA1) == sha1)
-		XCTAssert(CC.digest(testData, alg: .SHA256) == sha256)
-		XCTAssert(CC.digest(testData, alg: .SHA384) == sha384)
-		XCTAssert(CC.digest(testData, alg: .SHA512) == sha512)
-		XCTAssert(CC.digest(testData, alg: .SHA224) == sha224)
-		XCTAssert(CC.digest(testData, alg: .MD5) == md5)
+		XCTAssert(CC.digest(testData, alg: .sha1) == sha1)
+		XCTAssert(CC.digest(testData, alg: .sha256) == sha256)
+		XCTAssert(CC.digest(testData, alg: .sha384) == sha384)
+		XCTAssert(CC.digest(testData, alg: .sha512) == sha512)
+		XCTAssert(CC.digest(testData, alg: .sha224) == sha224)
+		XCTAssert(CC.digest(testData, alg: .md5) == md5)
 	}
-	
+
 	func testRandom() {
 		XCTAssert(CC.randomAvailable())
 		CC.generateRandom(10)
 	}
-	
+
     func testCreateKeyPair() {
 		XCTAssert(keyPair != nil)
 	}
-	
+
 	func testUpsert() {
 		let (priv, _) = keyPair!
-		XCTAssertNotNil(try? SwKeyStore.upsertKey(priv, keyTag: "priv", options: [kSecAttrAccessible:kSecAttrAccessibleWhenUnlockedThisDeviceOnly]))
+		XCTAssertNotNil(try? SwKeyStore.upsertKey(priv, keyTag: "priv",
+			options: [kSecAttrAccessible:kSecAttrAccessibleWhenUnlockedThisDeviceOnly]))
 		XCTAssertNotNil(try? SwKeyStore.upsertKey(priv, keyTag: "priv"))
 		XCTAssert(try SwKeyStore.getKey("priv") == priv)
 	}
-	
+
 	func testDel() throws {
 		let tag = "priv"
 		let (priv, _) = keyPair!
@@ -82,37 +87,37 @@ class SwCryptTest: XCTestCase {
 		XCTAssert(privDecrypted != nil)
 		XCTAssert(privDecrypted == priv)
 	}
-	
+
 	func testEncryptKey() {
-		encryptKey(.AES128CBC)
-		encryptKey(.AES256CBC)
+		encryptKey(.aes128CBC)
+		encryptKey(.aes256CBC)
 	}
-	
+
 	func decryptOpenSSLKeys(type: String) {
 		let bundle = NSBundle(forClass: self.dynamicType)
-		let encPEM = bundle.objectForInfoDictionaryKey("testPrivEncryptedPEMAES"+type) as! String
+		let encPEM = bundle.objectForInfoDictionaryKey("testPrivEncryptedPEMAES" + type) as! String
 		let decPEM = bundle.objectForInfoDictionaryKey("testPrivDecryptedPEM") as! String
 		let d = try? SwKeyConvert.PrivateKey.decryptPEM(encPEM, passphrase: "hello")
 		XCTAssert(d != nil)
 		XCTAssert(d! == decPEM)
 	}
-	
+
 	func decryptOpenSSLKeysBadPassphrase(type: String) {
 		let bundle = NSBundle(forClass: self.dynamicType)
-		let encPEM = bundle.objectForInfoDictionaryKey("testPrivEncryptedPEMAES"+type) as! String
+		let encPEM = bundle.objectForInfoDictionaryKey("testPrivEncryptedPEMAES" + type) as! String
 
 		XCTAssertThrowsError(try SwKeyConvert.PrivateKey.decryptPEM(encPEM, passphrase: "nohello")) {
-			XCTAssert($0 as? SwKeyConvert.Error == SwKeyConvert.Error.BadPassphrase)
+			XCTAssert($0 as? SwKeyConvert.Error == SwKeyConvert.Error.badPassphrase)
 		}
 	}
-	
+
 	func testOpenSSLKeys() {
 		decryptOpenSSLKeys("128")
 		decryptOpenSSLKeys("256")
 		decryptOpenSSLKeysBadPassphrase("128")
 		decryptOpenSSLKeysBadPassphrase("256")
 	}
-	
+
 	func encryptDecrypt(privKey: String, pubKey: String, mode: SEM.Mode) {
 		let testMessage = "This is a test string"
 		let encMessage = try? SEM.encryptMessage(testMessage, pemKey: pubKey, mode: mode)
@@ -121,38 +126,38 @@ class SwCryptTest: XCTestCase {
 		XCTAssert(decMessage != nil)
 		XCTAssert(testMessage == decMessage!)
 	}
-	
+
 	func encryptDecrypt(privKey: String, pubKey: String) {
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES128, block:.CBC_SHA256))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES128, block:.GCM))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES192, block:.CBC_SHA256))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES192, block:.GCM))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES256, block:.CBC_SHA256))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.AES256, block:.GCM))
+		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.aes128, block:.cbcSHA256))
+		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.aes128, block:.gcm))
+		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.aes192, block:.cbcSHA256))
+		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.aes192, block:.gcm))
+		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.aes256, block:.cbcSHA256))
+		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.aes256, block:.gcm))
 	}
-	
+
 	func testEncryptGeneratedKeyPair() {
 		let (priv, pub) = keyPair!
 		encryptDecrypt(priv, pubKey: pub)
 	}
-	
+
 	func testEncryptOpenSSLKeyPair() {
 		let bundle = NSBundle(forClass: self.dynamicType)
 		let priv = bundle.objectForInfoDictionaryKey("testPrivPEM") as! String
 		let pub = bundle.objectForInfoDictionaryKey("testPubPEM") as! String
 		encryptDecrypt(priv, pubKey: pub)
 	}
-	
+
 	func testSimpleSignVerify() {
 		let (priv, pub) = keyPair!
 		let testMessage = "rirararom_vagy_rararirom"
-		
+
 		let sign = try? SMSV.sign(testMessage, pemKey: priv)
 		XCTAssert(sign != nil)
 		let verified = try? SMSV.verify(testMessage, pemKey: pub, sign: sign!)
 		XCTAssert(verified == true)
 	}
-	
+
 	func testCCM() {
 		let data = "hello".dataUsingEncoding(NSUTF8StringEncoding)!
 		let key = "8B142BB0FA0043C32821BB90A3453884".dataFromHexadecimalString()!
@@ -160,15 +165,17 @@ class SwCryptTest: XCTestCase {
 		let aData = "hello".dataUsingEncoding(NSUTF8StringEncoding)!
 		let tagLength = 16
 		XCTAssert(CC.CCM.available())
-		
-		let enc = try? CC.CCM.crypt(.encrypt, algorithm: .AES, data: data, key: key, iv: iv, aData: aData, tagLength: tagLength)
+
+		let enc = try? CC.CCM.crypt(.encrypt, algorithm: .aes, data: data, key: key, iv: iv,
+		                            aData: aData, tagLength: tagLength)
 		XCTAssert(enc != nil)
-		let dec = try? CC.CCM.crypt(.decrypt, algorithm: .AES, data: enc!.0, key: key, iv: iv, aData: aData, tagLength: tagLength)
+		let dec = try? CC.CCM.crypt(.decrypt, algorithm: .aes, data: enc!.0, key: key, iv: iv,
+		                            aData: aData, tagLength: tagLength)
 		XCTAssert(dec != nil)
 		XCTAssert(enc!.1 == dec!.1)
 		XCTAssert(dec!.0 == data)
 	}
-	
+
 	func testCCMSJCL() {
 		let data = "hello".dataUsingEncoding(NSUTF8StringEncoding)!
 		let key = "8B142BB0FA0043C32821BB90A3453884".dataFromHexadecimalString()!
@@ -177,12 +184,14 @@ class SwCryptTest: XCTestCase {
 		let tagLength = 16
 		let sjclCipher = NSData(base64EncodedString: "VqAna25S22M+yOZz57wCllx7Itql", options: [])!
 		XCTAssert(CC.CCM.available())
-		
-		let enc = try? CC.cryptAuth(.encrypt, blockMode: .CCM, algorithm: .AES, data: data, aData: aData, key: key, iv: iv, tagLength: tagLength)
+
+		let enc = try? CC.cryptAuth(.encrypt, blockMode: .ccm, algorithm: .aes, data: data,
+		                            aData: aData, key: key, iv: iv, tagLength: tagLength)
 		XCTAssert(enc != nil)
 		XCTAssert(enc! == sjclCipher)
-		
-		let dec = try? CC.cryptAuth(.decrypt, blockMode: .CCM, algorithm: .AES, data: sjclCipher, aData: aData, key: key, iv: iv, tagLength: tagLength)
+
+		let dec = try? CC.cryptAuth(.decrypt, blockMode: .ccm, algorithm: .aes, data: sjclCipher,
+		                            aData: aData, key: key, iv: iv, tagLength: tagLength)
 		XCTAssert(dec != nil)
 		XCTAssert(dec! == data)
 	}
@@ -190,43 +199,46 @@ class SwCryptTest: XCTestCase {
 	func testPBKDF2() {
 		let password = "password"
 		let salt = "salt".dataUsingEncoding(NSUTF8StringEncoding)!
-		
+
 		XCTAssert(CC.KeyDerivation.available())
-		let stretched = try? CC.KeyDerivation.PBKDF2(password, salt: salt, prf: .SHA256, rounds: 4096)
+		let stretched = try? CC.KeyDerivation.PBKDF2(password, salt: salt, prf: .sha256, rounds: 4096)
 		XCTAssert(stretched != nil)
-		let t = "c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a".dataFromHexadecimalString()
+		let t = "c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a"
+			.dataFromHexadecimalString()
 		XCTAssert(t == stretched!)
 	}
-	
+
 	func testKeyWrap() {
 		let kek = "000102030405060708090A0B0C0D0E0F".dataFromHexadecimalString()!
 		let tkey = "00112233445566778899AABBCCDDEEFF".dataFromHexadecimalString()!
-		let wrappedKey = "1FA68B0A8112B447AEF34BD8FB5A7B829D3E862371D2CFE5".dataFromHexadecimalString()!
-		
+		let wrappedKey = "1FA68B0A8112B447AEF34BD8FB5A7B829D3E862371D2CFE5"
+			.dataFromHexadecimalString()!
+
 		XCTAssert(CC.KeyWrap.available())
-		let cipher = try? CC.KeyWrap.SymmetricKeyWrap(CC.KeyWrap.rfc3394_iv, kek: kek, rawKey: tkey)
+		let cipher = try? CC.KeyWrap.SymmetricKeyWrap(CC.KeyWrap.rfc3394IV, kek: kek, rawKey: tkey)
 		XCTAssert(cipher != nil)
 		XCTAssert(cipher! == wrappedKey)
-		
-		let key = try? CC.KeyWrap.SymmetricKeyUnwrap(CC.KeyWrap.rfc3394_iv, kek: kek, wrappedKey: cipher!)
+
+		let key = try? CC.KeyWrap.SymmetricKeyUnwrap(CC.KeyWrap.rfc3394IV, kek: kek, wrappedKey: cipher!)
 		XCTAssert(key != nil)
 		XCTAssert(key! == tkey)
 	}
-	
+
 	func testECGenkey() {
 		XCTAssert(CC.EC.available())
-		
+
 		let keys = try? CC.EC.generateKeyPair(384)
 		XCTAssert(keys != nil)
 		let keysTooLittle = try? CC.EC.generateKeyPair(128)
 		XCTAssert(keysTooLittle == nil)
 	}
-	
+
 	func testECSignVerify() {
 		let keys = try? CC.EC.generateKeyPair(256)
 		XCTAssert(keys != nil)
-		let hash = "c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a".dataFromHexadecimalString()!
-		
+		let hash = "c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a"
+			.dataFromHexadecimalString()!
+
 		let signed = try? CC.EC.signHash(keys!.0, hash: hash)
 		XCTAssert(signed != nil)
 		let verified = try? CC.EC.verifyHash(keys!.1, hash: hash, signedData: signed!)
@@ -245,35 +257,35 @@ class SwCryptTest: XCTestCase {
 		XCTAssert(shared2 != nil)
 		XCTAssert(shared1! == shared2!)
 	}
-	
+
 	func testDH() {
 		XCTAssert(CC.DH.available())
 		let dh1 = try? CC.DH.DH(dhParam: .rfc3526Group5)
 		XCTAssert(dh1 != nil)
 		let dh2 = try? CC.DH.DH(dhParam: .rfc3526Group5)
 		XCTAssert(dh2 != nil)
-		
+
 		let pub1 = try? dh1!.generateKey()
 		XCTAssert(pub1 != nil)
 		let pub2 = try? dh2!.generateKey()
 		XCTAssert(pub2 != nil)
-		
+
 		let common1 = try? dh1!.computeKey(pub2!)
 		XCTAssert(common1 != nil)
 		let common2 = try? dh2!.computeKey(pub1!)
 		XCTAssert(common2 != nil)
 		XCTAssert(common1 == common2)
 	}
-	
+
 	func testCRC() {
 		XCTAssert(CC.CRC.available())
 		let input = "abcdefg".dataUsingEncoding(NSUTF8StringEncoding)!
-		let expectedOutput : UInt64 = 0x312A6AA6
-		let output = try? CC.CRC.crc(input, mode: .CRC_32)
+		let expectedOutput: UInt64 = 0x312A6AA6
+		let output = try? CC.CRC.crc(input, mode: .crc32)
 		XCTAssert(output != nil)
 		XCTAssert(output == expectedOutput)
 	}
-	
+
 	func testCMAC() {
 		XCTAssert(CC.CMAC.available())
 		let input = "abcdefg".dataUsingEncoding(NSUTF8StringEncoding)!
