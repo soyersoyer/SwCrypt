@@ -805,8 +805,7 @@ public class SMSV {
 		guard let derKey = try? SwKeyConvert.PrivateKey.pemToPKCS1DER(pemKey) else {
 			throw Error(.invalidKey)
 		}
-		let hash = CC.digest(data, alg: .sha512)
-		return try! CC.RSA.sign(hash, derKey: derKey, padding: .oaep, digest: .sha512)
+		return try! CC.RSA.sign(data, derKey: derKey, padding: .pss, digest: .sha512, saltLen: 16)
 	}
 
 	public static func verify(message: String, pemKey: String, sign: String) throws -> Bool {
@@ -821,9 +820,8 @@ public class SMSV {
 		guard let derKey = try? SwKeyConvert.PublicKey.pemToPKCS1DER(pemKey) else {
 			throw Error(.invalidKey)
 		}
-		let hash = CC.digest(data, alg: .sha512)
 		return try! CC.RSA.verify(
-			hash, derKey: derKey, padding: .oaep, digest: .sha512, signedData: signData)
+			data, derKey: derKey, padding: .pss, digest: .sha512, saltLen: 16, signedData: signData)
 	}
 }
 
@@ -871,10 +869,14 @@ public class CC {
 		case rmd128 = 4, rmd160 = 5, rmd256 = 6, rmd320 = 7
 		case sha1 = 8
 		case sha224 = 9, sha256 = 10, sha384 = 11, sha512 = 12
+
+		var length: Int {
+			return CCDigestGetOutputSize!(algorithm: self.rawValue)
+		}
 	}
 
 	public static func digest(data: NSData, alg: DigestAlgorithm) -> NSData {
-		let output = NSMutableData(length: CCDigestGetOutputSize!(algorithm: alg.rawValue))!
+		let output = NSMutableData(length: alg.length)!
 		CCDigest!(algorithm: alg.rawValue,
 		          data: data.bytes,
 		          dataLen: data.length,
@@ -1231,6 +1233,11 @@ public class CC {
 			case oaep = 1002
 		}
 
+		public enum AsymmetricSAPadding: UInt32 {
+			case pkcs15 = 1001
+			case pss = 1002
+		}
+
 		public static func generateKeyPair(keySize: Int = 4096) throws -> (NSData, NSData) {
 			var privateKey: CCRSACryptorRef = nil
 			var publicKey: CCRSACryptorRef = nil
@@ -1326,78 +1333,265 @@ public class CC {
 			return derKey
 		}
 
+		private static func getKeyType(key: CCRSACryptorRef) -> KeyType {
+			return KeyType(rawValue: CCRSAGetKeyType!(key))!
+		}
+
 		private static func getKeySize(key: CCRSACryptorRef) -> Int {
 			return Int(CCRSAGetKeySize!(key)/8)
 		}
 
-		public static func sign(hash: NSData, derKey: NSData, padding: AsymmetricPadding,
-		                        digest: DigestAlgorithm) throws -> NSData {
+		public static func sign(message: NSData, derKey: NSData, padding: AsymmetricSAPadding,
+		                        digest: DigestAlgorithm, saltLen: Int) throws -> NSData {
 			let key = try importFromDERKey(derKey)
 			defer { CCRSACryptorRelease!(key) }
+			guard getKeyType(key) == .privateKey else { throw CCError(.paramError) }
 
 			let keySize = getKeySize(key)
-			var signedDataLength = keySize
-			let signedData = NSMutableData(length:signedDataLength)!
 
-			//ccrsa_oaep_encode_parameter bug
-			if padding == .oaep &&
-				hash.length > keySize - 2 * CCDigestGetOutputSize!(algorithm: digest.rawValue) - 2 {
-				assertionFailure("corecrypto: sign with OAEP is buggy in this configuration")
+			switch padding {
+			case .pkcs15:
+				let hash = CC.digest(message, alg: digest)
+				var signedDataLength = keySize
+				let signedData = NSMutableData(length:signedDataLength)!
+				let status = CCRSACryptorSign!(
+					privateKey: key,
+					padding: AsymmetricPadding.pkcs1.rawValue,
+					hashToSign: hash.bytes, hashSignLen: hash.length,
+					digestType: digest.rawValue, saltLen: 0 /*unused*/,
+					signedData: signedData.mutableBytes, signedDataLen: &signedDataLength)
+				guard status == noErr else { throw CCError(status) }
+
+				signedData.length = signedDataLength
+				return signedData
+			case .pss:
+				let encMessage = try add_pss_padding(
+					digest,
+					saltLength: saltLen,
+					keyLength: keySize,
+					message: message)
+				return try crypt(encMessage, key: key)
 			}
-
-			if padding == .oaep && hash.length != CCDigestGetOutputSize!(algorithm: digest.rawValue) {
-				assertionFailure("corecrypto: sign with OAEP is buggy in this configuration")
-			}
-
-			let status = CCRSACryptorSign!(
-				privateKey: key,
-				padding: padding.rawValue,
-				hashToSign: hash.bytes, hashSignLen: hash.length,
-				digestType: digest.rawValue, saltLen: 0 /*unused*/,
-				signedData: signedData.mutableBytes, signedDataLen: &signedDataLength)
-			guard status == noErr else { throw CCError(status) }
-
-			signedData.length = signedDataLength
-			return signedData
 		}
 
-		public static func verify(hash: NSData, derKey: NSData, padding: AsymmetricPadding,
-		                          digest: DigestAlgorithm, signedData: NSData) throws -> Bool {
+		public static func verify(message: NSData, derKey: NSData, padding: AsymmetricSAPadding,
+		                          digest: DigestAlgorithm, saltLen: Int,
+		                          signedData: NSData) throws -> Bool {
 			let key = try importFromDERKey(derKey)
 			defer { CCRSACryptorRelease!(key) }
+			guard getKeyType(key) == .publicKey else { throw CCError(.paramError) }
 
-			if padding == .oaep && hash.length != CCDigestGetOutputSize!(algorithm: digest.rawValue) {
-				assertionFailure("corecrypto: verify with OAEP is buggy in this configuration")
+			let keySize = getKeySize(key)
+
+			switch padding {
+			case .pkcs15:
+				let hash = CC.digest(message, alg: digest)
+				let status = CCRSACryptorVerify!(
+					publicKey: key,
+					padding: padding.rawValue,
+					hash: hash.bytes, hashLen: hash.length,
+					digestType: digest.rawValue, saltLen: 0 /*unused*/,
+					signedData: signedData.bytes, signedDataLen:signedData.length)
+				let kCCNotVerified: CCCryptorStatus = -4306
+				if status == kCCNotVerified {
+					return false
+				}
+				guard status == noErr else { throw CCError(status) }
+				return true
+			case .pss:
+				let encoded = try crypt(signedData, key:key)
+				return try verify_pss_padding(
+					digest,
+					saltLength: saltLen,
+					keyLength: keySize,
+					message: message,
+					encMessage: encoded)
+			}
+		}
+
+		private static func crypt(data: NSData, key: CCRSACryptorRef) throws -> NSData {
+			var outLength = data.length
+			let out = NSMutableData(length: outLength)!
+			let status = CCRSACryptorCrypt!(
+				rsaKey: key,
+				data: data.bytes, dataLength: data.length,
+				out: out.mutableBytes, outLength: &outLength)
+			guard status == noErr else { throw CCError(status) }
+			out.length = outLength
+
+			return out
+		}
+
+		private static func mgf1(digest: DigestAlgorithm,
+		                         seed: NSData, maskLength: Int) -> NSMutableData {
+			let tseed = NSMutableData(data: seed)
+			tseed.increaseLengthBy(4)
+
+			var interval = maskLength / digest.length
+			if  maskLength % digest.length != 0 {
+				interval += 1
 			}
 
-			let status = CCRSACryptorVerify!(
-				publicKey: key,
-				padding: padding.rawValue,
-				hash: hash.bytes, hashLen: hash.length,
-				digestType: digest.rawValue, saltLen: 0 /*unused*/,
-				signedData: signedData.bytes, signedDataLen:signedData.length)
-			let kCCNotVerified: CCCryptorStatus = -4306
-			if status == kCCNotVerified {
+			func pack(n: Int) -> [UInt8] {
+				return [
+					UInt8(n>>24 & 0xff),
+					UInt8(n>>16 & 0xff),
+					UInt8(n>>8 & 0xff),
+					UInt8(n>>0 & 0xff)
+				]
+			}
+
+			let mask = NSMutableData()
+			for counter in 0 ..< interval {
+				tseed.replaceBytesInRange(NSRange(location: tseed.length - 4, length: 4),
+				                          withBytes: pack(counter))
+				mask.appendData(CC.digest(tseed, alg: digest))
+			}
+			mask.length = maskLength
+			return mask
+		}
+
+		private static func xorData(data1: NSData, _ data2: NSData) -> NSMutableData {
+			precondition(data1.length == data2.length)
+
+			let ret = NSMutableData(length:data1.length)!
+			let r = UnsafeMutablePointer<UInt8>(ret.mutableBytes)
+
+			let bytes1 = UnsafePointer<UInt8>(data1.bytes)
+			let bytes2 = UnsafePointer<UInt8>(data2.bytes)
+			for i in 0 ..< ret.length {
+				r[i] = bytes1[i] ^ bytes2[i]
+			}
+			return ret
+		}
+
+		private static func add_pss_padding(digest: DigestAlgorithm,
+		                                   saltLength: Int,
+		                                   keyLength: Int,
+		                                   message: NSData) throws -> NSData {
+
+			if keyLength < 16 || saltLength < 0 {
+				throw CCError(.paramError)
+			}
+
+			// The maximal bit size of a non-negative integer is one less than the bit
+			// size of the key since the first bit is used to store sign
+			let emBits = keyLength * 8  - 1
+			var emLength = emBits / 8
+			if emBits % 8 != 0 {
+				emLength += 1
+			}
+
+			let hash = CC.digest(message, alg: digest)
+
+			if emLength < hash.length + saltLength + 2 {
+				throw CCError(.paramError)
+			}
+
+			let salt = CC.generateRandom(saltLength)
+
+			let mPrime = NSMutableData(length: 8)!
+			mPrime.appendData(hash)
+			mPrime.appendData(salt)
+			let mPrimeHash = CC.digest(mPrime, alg: digest)
+
+			let padding = NSMutableData(length: emLength - saltLength - hash.length - 2)!
+			let db = NSMutableData(data: padding)
+			db.appendBytes([0x01] as [UInt8], length: 1)
+			db.appendData(salt)
+			let dbMask = mgf1(digest, seed: mPrimeHash, maskLength: emLength - hash.length - 1)
+			let maskedDB = xorData(db, dbMask)
+
+			let zeroBits = 8 * emLength - emBits
+			UnsafeMutablePointer<UInt8>(maskedDB.mutableBytes)[0] &= UInt8(0xff >> zeroBits)
+
+			let ret = NSMutableData(data:maskedDB)
+			ret.appendData(mPrimeHash)
+			ret.appendBytes([0xBC] as [UInt8], length: 1)
+			return ret
+		}
+
+		private static func verify_pss_padding(digest: DigestAlgorithm,
+		                                      saltLength: Int, keyLength: Int,
+		                                      message: NSData, encMessage: NSData) throws -> Bool {
+			if keyLength < 16 || saltLength < 0 {
+				throw CCError(.paramError)
+			}
+
+			guard encMessage.length > 0 else {
 				return false
 			}
-			guard status == noErr else { throw CCError(status) }
 
+			let emBits = keyLength * 8  - 1
+			var emLength = emBits / 8
+			if emBits % 8 != 0 {
+				emLength += 1
+			}
+
+			let hash = CC.digest(message, alg: digest)
+
+			if emLength < hash.length + saltLength + 2 {
+				return false
+			}
+			if encMessage.bytesView[encMessage.length-1] != 0xBC {
+				return false
+			}
+			let zeroBits = 8 * emLength - emBits
+			let zeroBitsM = 8 - zeroBits
+			let maskedDBLength = emLength - hash.length - 1
+			let maskedDB = encMessage.subdataWithRange(NSRange(location: 0, length: maskedDBLength))
+			if Int(maskedDB.bytesView[0]) >> zeroBitsM != 0 {
+				return false
+			}
+			let mPrimeHash = encMessage.subdataWithRange(
+				NSRange(location: maskedDBLength, length: hash.length))
+			let dbMask = mgf1(digest, seed: mPrimeHash, maskLength: emLength - hash.length - 1)
+			let db = xorData(maskedDB, dbMask)
+			UnsafeMutablePointer<UInt8>(db.mutableBytes)[0] &= UInt8(0xff >> zeroBits)
+
+			let zeroLength = emLength - hash.length - saltLength - 2
+			let zeroString = NSMutableData(length:zeroLength)
+			if db.subdataWithRange(NSRange(location: 0, length: zeroLength)) != zeroString {
+				return false
+			}
+			if db.bytesView[zeroLength] != 0x01 {
+				return false
+			}
+			let salt = db.subdataWithRange(
+				NSRange(location:db.length - saltLength, length:saltLength))
+			let mPrime = NSMutableData(length:8)!
+			mPrime.appendData(hash)
+			mPrime.appendData(salt)
+			let mPrimeHash2 = CC.digest(mPrime, alg: digest)
+			if mPrimeHash != mPrimeHash2 {
+				return false
+			}
 			return true
 		}
+
 
 		public static func available() -> Bool {
 			return CCRSACryptorGeneratePair != nil &&
 				CCRSACryptorRelease != nil &&
+				CCRSAGetKeyType != nil &&
 				CCRSAGetKeySize != nil &&
 				CCRSACryptorEncrypt != nil &&
 				CCRSACryptorDecrypt != nil &&
 				CCRSACryptorExport != nil &&
 				CCRSACryptorImport != nil &&
 				CCRSACryptorSign != nil &&
-				CCRSACryptorVerify != nil
+				CCRSACryptorVerify != nil &&
+				CCRSACryptorCrypt != nil
 		}
 
 		private typealias CCRSACryptorRef = UnsafePointer<Void>
+		private typealias CCRSAKeyType = UInt32
+		private enum KeyType: CCRSAKeyType {
+			case publicKey = 0, privateKey
+			case blankPublicKey = 97, blankPrivateKey
+			case badKey = 99
+		}
+
 		private typealias CCRSACryptorGeneratePairT = @convention(c) (
 			keySize: Int,
 			e: UInt32,
@@ -1409,6 +1603,9 @@ public class CC {
 		private typealias CCRSACryptorReleaseT = @convention(c) (CCRSACryptorRef) -> Void
 		private static let CCRSACryptorRelease: CCRSACryptorReleaseT? =
 			getFunc(dl, f: "CCRSACryptorRelease")
+
+		private typealias CCRSAGetKeyTypeT = @convention(c) (CCRSACryptorRef) -> CCRSAKeyType
+		private static let CCRSAGetKeyType: CCRSAGetKeyTypeT? = getFunc(dl, f: "CCRSAGetKeyType")
 
 		private typealias CCRSAGetKeySizeT = @convention(c) (CCRSACryptorRef) -> Int32
 		private static let CCRSAGetKeySize: CCRSAGetKeySizeT? = getFunc(dl, f: "CCRSAGetKeySize")
@@ -1477,6 +1674,13 @@ public class CC {
 		private static let CCRSACryptorVerify: CCRSACryptorVerifyT? =
 			getFunc(dl, f: "CCRSACryptorVerify")
 
+		private typealias CCRSACryptorCryptT = @convention(c) (
+			rsaKey: CCRSACryptorRef,
+			data: UnsafePointer<Void>, dataLength: size_t,
+			out: UnsafeMutablePointer<Void>,
+			outLength: UnsafeMutablePointer<size_t>) -> CCCryptorStatus
+		private static let CCRSACryptorCrypt: CCRSACryptorCryptT? =
+			getFunc(dl, f: "CCRSACryptorCrypt")
 	}
 
 	public class DH {

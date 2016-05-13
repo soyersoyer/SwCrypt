@@ -27,6 +27,13 @@ try SwKeyConvert.PrivateKey.decryptPEM(privEncrypted, passphrase: "longpassword"
 try CC.RSA.encrypt(data, derKey: publicKey, tag: tag, padding: .oaep, digest: .sha1)
 try CC.RSA.decrypt(data, derKey: privateKey, tag: tag, padding: .oaep, digest: .sha1)
 ```
+### Sign, verify data with RSA
+```
+let sign = try? CC.RSA.sign(testMessage, derKey: privKey, padding: .pss, 
+ digest: .sha256, saltLen: 16)
+let verified = try? CC.RSA.verify(testMessage, derKey: pubKey, padding: .pss,
+ digest: .sha256, saltLen: 16, signedData: sign!)
+```
 ### Elliptic curve functions
 ```
 let keys = try? CC.EC.generateKeyPair(384)
@@ -137,16 +144,14 @@ Simple Message Sign and Verify
 Sign:
 
 - Convert message to NSData using UTF8 encoding
-- Calculate the NSData's SHA512 digest
-- Sign with the private key using OAEP padding with SHA512 digest
+- Sign with the private key using PSS padding with SHA512 digest
 - Base64 encode the sign
 
 Verify:
 
 - Base64 decode the sign
 - Convert message to NSData using UTF8 encoding
-- Calculate the NSData's SHA512 digest
-- Verify with the public key using OAEP padding with SHA512 digest
+- Verify with the public key using PSS padding with SHA512 digest
 
 -----
 

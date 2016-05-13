@@ -165,6 +165,24 @@ class SwCryptTest: XCTestCase {
 		encryptDecrypt(priv, pubKey: pub)
 	}
 
+	func signVerify(privKey: NSData, pubKey:NSData, padding: CC.RSA.AsymmetricSAPadding) {
+		let testMessage = "rirararom_vagy_rararirom".dataUsingEncoding(NSUTF8StringEncoding)!
+		let sign = try? CC.RSA.sign(testMessage, derKey: privKey, padding: padding,
+		                            digest: .sha256, saltLen: 16)
+		XCTAssert(sign != nil)
+		let verified = try? CC.RSA.verify(testMessage, derKey: pubKey, padding: padding,
+		                                  digest: .sha256, saltLen: 16, signedData: sign!)
+		XCTAssert(verified != nil && verified! == true)
+	}
+
+	func testSignVerify() {
+		let (priv, pub) = keyPair!
+		let privD = try! SwKeyConvert.PrivateKey.pemToPKCS1DER(priv)
+		let pubD = try! SwKeyConvert.PublicKey.pemToPKCS1DER(pub)
+		signVerify(privD, pubKey: pubD, padding: .pkcs15)
+		signVerify(privD, pubKey: pubD, padding: .pss)
+	}
+
 	func testSimpleSignVerify() {
 		let (priv, pub) = keyPair!
 		let testMessage = "rirararom_vagy_rararirom"
