@@ -3,7 +3,7 @@
 SwCrypt
 =========
 
-### Create public and private keys in DER format
+### Create public and private RSA keys in DER format
 ```
 let (privateKey, publicKey) = try! CC.RSA.generateKeyPair(2048)
 ```
@@ -91,69 +91,8 @@ try SwKeyStore.upsertKey(privateKeyPEM, keyTag: "priv", options: [kSecAttrAccess
 try SwKeyStore.getKey("priv")
 try SwKeyStore.delKey("priv")
 ```
-
-### Encrypt/decrypt message in SEM (Simple Encrypted Message) format
-(works with OpenSSL PEM formatted keys too)
-```
-//public enum AESMode : UInt8 {case aes128, aes192, aes256}
-//public enum BlockMode : UInt8 {case cbcSHA256, gcm}
-
-let mode = SEM.Mode(aes:.aes256, block:.cbcSHA256)
-try SEM.encryptMessage(testMessage, pemKey: publicKey, mode: mode)
-try SEM.decryptMessage(encMessage, pemKey: privateKey)
-try SEM.encryptData(testData, pemKey: publicKey, mode: mode)
-try SEM.decryptData(encData, pemKey: privateKey)
-```
-
-### Sign, verify messages with SMSV (Simple Message Sign and Verify)
-```
-let sign = try? SMSV.sign(testMessage, pemKey: priv)
-let verified = try? SMSV.verify(testMessage, pemKey: pub, sign: sign!)
-```
-
 -----
 
-SEM (Simple Encrypted Message) format
--------------------------------------
-
-When encrypting using a public key:
-
-- Convert message to NSData using UTF8 encoding
-- Create message header :
-  - Version indicator 1 byte (current: 0)
-  - AES mode 1 byte
-  - Cipher mode 1 byte
-  - AES key (depends on aes mode - 16, 24, 32 byte)
-  - IV (depends on cipher mode - 16, 12 byte)
-- Encrypt message header with the public key with OAEP padding (size = RSA key size)
-- Encrypt message with the chosen aes and cipher mode (calculate message auth tag with aData: encrypted header, and append to the encrypted message)
-- Append encrypted header and messsage
-- Base64 encode
-
-When decrypting using a private key:
-
-- Base64 decode
-- Decrypt the first block (RSA key size)
-- Read the message header (Version, AES mode, Cipher mode), AES key, IV
-- Decrypt message (check message auth with aData: encrypted header)
-- Convert NSData to string with UTF8 decoding
-
-Simple Message Sign and Verify
-------------------------------
-
-Sign:
-
-- Convert message to NSData using UTF8 encoding
-- Sign with the private key using PSS padding with SHA512 digest
-- Base64 encode the sign
-
-Verify:
-
-- Base64 decode the sign
-- Convert message to NSData using UTF8 encoding
-- Verify with the public key using PSS padding with SHA512 digest
-
------
 
 Check availability
 ---------------------

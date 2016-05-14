@@ -14,11 +14,8 @@ class SwCryptTest: XCTestCase {
         super.tearDown()
     }
 
-	static func createKeyPair(size: Int) throws -> (String, String) {
-		let keyPair = try CC.RSA.generateKeyPair(size)
-		let privKey = SwKeyConvert.PrivateKey.derToPKCS1PEM(keyPair.0)
-		let pubKey = SwKeyConvert.PublicKey.derToPKCS1PEM(keyPair.1)
-		return (privKey, pubKey)
+	static func createKeyPair(size: Int) throws -> (NSData, NSData) {
+		return try CC.RSA.generateKeyPair(size)
 	}
 
 	func testAvailable() {
@@ -63,16 +60,18 @@ class SwCryptTest: XCTestCase {
 
 	func testUpsert() {
 		let (priv, _) = keyPair!
-		XCTAssertNotNil(try? SwKeyStore.upsertKey(priv, keyTag: "priv",
+		let privKey = SwKeyConvert.PrivateKey.derToPKCS1PEM(priv)
+		XCTAssertNotNil(try? SwKeyStore.upsertKey(privKey, keyTag: "priv",
 			options: [kSecAttrAccessible:kSecAttrAccessibleWhenUnlockedThisDeviceOnly]))
-		XCTAssertNotNil(try? SwKeyStore.upsertKey(priv, keyTag: "priv"))
-		XCTAssert(try SwKeyStore.getKey("priv") == priv)
+		XCTAssertNotNil(try? SwKeyStore.upsertKey(privKey, keyTag: "priv"))
+		XCTAssert(try SwKeyStore.getKey("priv") == privKey)
 	}
 
 	func testDel() throws {
 		let tag = "priv"
 		let (priv, _) = keyPair!
-		XCTAssertNotNil(try? SwKeyStore.upsertKey(priv, keyTag: tag))
+		let privKey = SwKeyConvert.PrivateKey.derToPKCS1PEM(priv)
+		XCTAssertNotNil(try? SwKeyStore.upsertKey(privKey, keyTag: tag))
 		XCTAssertNotNil(try? SwKeyStore.getKey(tag))
 		XCTAssertNotNil(try? SwKeyStore.delKey(tag))
 		XCTAssertNil(try? SwKeyStore.getKey(tag))
@@ -81,11 +80,13 @@ class SwCryptTest: XCTestCase {
 	func encryptKey(enc: SwKeyConvert.PrivateKey.EncMode) {
 		let pass = "hello"
 		let (priv, _) = keyPair!
-		let privEncrypted = try? SwKeyConvert.PrivateKey.encryptPEM(priv, passphrase: pass, mode: enc)
+		let privKey = SwKeyConvert.PrivateKey.derToPKCS1PEM(priv)
+
+		let privEncrypted = try? SwKeyConvert.PrivateKey.encryptPEM(privKey, passphrase: pass, mode: enc)
 		XCTAssert(privEncrypted != nil)
 		let privDecrypted = try? SwKeyConvert.PrivateKey.decryptPEM(privEncrypted!, passphrase: pass)
 		XCTAssert(privDecrypted != nil)
-		XCTAssert(privDecrypted == priv)
+		XCTAssert(privDecrypted == privKey)
 	}
 
 	func testEncryptKey() {
@@ -128,6 +129,16 @@ class SwCryptTest: XCTestCase {
 		}
 	}
 
+	func testOpenSSLKeyPair() {
+		let bundle = NSBundle(forClass: self.dynamicType)
+		let priv = bundle.objectForInfoDictionaryKey("testPrivPEM") as! String
+		let pub = bundle.objectForInfoDictionaryKey("testPubPEM") as! String
+		let privKey = try? SwKeyConvert.PrivateKey.pemToPKCS1DER(priv)
+		XCTAssert(privKey != nil)
+		let pubKey = try? SwKeyConvert.PublicKey.pemToPKCS1DER(pub)
+		XCTAssert(pubKey != nil)
+	}
+
 	func testOpenSSLKeys() {
 		decryptOpenSSLKeys("128")
 		decryptOpenSSLKeys("256")
@@ -135,34 +146,27 @@ class SwCryptTest: XCTestCase {
 		decryptOpenSSLKeysBadPassphrase("256")
 	}
 
-	func encryptDecrypt(privKey: String, pubKey: String, mode: SEM.Mode) {
-		let testMessage = "This is a test string"
-		let encMessage = try? SEM.encryptMessage(testMessage, pemKey: pubKey, mode: mode)
-		XCTAssert(encMessage != nil)
-		let decMessage = try? SEM.decryptMessage(encMessage!, pemKey: privKey)
-		XCTAssert(decMessage != nil)
-		XCTAssert(testMessage == decMessage!)
-	}
-
-	func encryptDecrypt(privKey: String, pubKey: String) {
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.aes128, block:.cbcSHA256))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.aes128, block:.gcm))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.aes192, block:.cbcSHA256))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.aes192, block:.gcm))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.aes256, block:.cbcSHA256))
-		encryptDecrypt(privKey, pubKey: pubKey, mode: SEM.Mode(aes:.aes256, block:.gcm))
-	}
-
-	func testEncryptGeneratedKeyPair() {
+	func testEncryptDecryptOAEPSHA256() {
 		let (priv, pub) = keyPair!
-		encryptDecrypt(priv, pubKey: pub)
+		let testData = "This is a test string".dataUsingEncoding(NSUTF8StringEncoding)!
+
+		let e = try? CC.RSA.encrypt(testData, derKey: pub, tag: NSData(), padding: .oaep, digest: .sha256)
+		XCTAssert(e != nil)
+		let d = try? CC.RSA.decrypt(e!, derKey: priv, tag: NSData(), padding: .oaep, digest: .sha256)
+		XCTAssert(d != nil)
+		XCTAssert(testData == d!.0)
 	}
 
-	func testEncryptOpenSSLKeyPair() {
-		let bundle = NSBundle(forClass: self.dynamicType)
-		let priv = bundle.objectForInfoDictionaryKey("testPrivPEM") as! String
-		let pub = bundle.objectForInfoDictionaryKey("testPubPEM") as! String
-		encryptDecrypt(priv, pubKey: pub)
+	func testEncryptDecryptGCM() {
+		let aesKey = CC.generateRandom(32)
+		let iv = CC.generateRandom(12)
+		let testData = "This is a test string".dataUsingEncoding(NSUTF8StringEncoding)!
+
+		let e = try? CC.cryptAuth(.encrypt, blockMode: .gcm, algorithm: .aes, data: testData, aData: NSData(), key: aesKey, iv: iv, tagLength: 8)
+		XCTAssert(e != nil)
+		let d = try? CC.cryptAuth(.decrypt, blockMode: .gcm, algorithm: .aes, data: e!, aData: NSData(), key: aesKey, iv: iv, tagLength: 8)
+		XCTAssert(d != nil)
+		XCTAssert(testData == d!)
 	}
 
 	func signVerify(privKey: NSData, pubKey:NSData, padding: CC.RSA.AsymmetricSAPadding) {
@@ -177,20 +181,8 @@ class SwCryptTest: XCTestCase {
 
 	func testSignVerify() {
 		let (priv, pub) = keyPair!
-		let privD = try! SwKeyConvert.PrivateKey.pemToPKCS1DER(priv)
-		let pubD = try! SwKeyConvert.PublicKey.pemToPKCS1DER(pub)
-		signVerify(privD, pubKey: pubD, padding: .pkcs15)
-		signVerify(privD, pubKey: pubD, padding: .pss)
-	}
-
-	func testSimpleSignVerify() {
-		let (priv, pub) = keyPair!
-		let testMessage = "rirararom_vagy_rararirom"
-
-		let sign = try? SMSV.sign(testMessage, pemKey: priv)
-		XCTAssert(sign != nil)
-		let verified = try? SMSV.verify(testMessage, pemKey: pub, sign: sign!)
-		XCTAssert(verified == true)
+		signVerify(priv, pubKey: pub, padding: .pkcs15)
+		signVerify(priv, pubKey: pub, padding: .pss)
 	}
 
 	func testCCM() {
