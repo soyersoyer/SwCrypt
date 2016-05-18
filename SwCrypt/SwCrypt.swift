@@ -670,6 +670,12 @@ public class CC {
 	public typealias CCMode = UInt32
 	public enum BlockMode: CCMode {
 		case ecb = 1, cbc, cfb, ctr, f8, lrw, ofb, xts, rc4, cfb8
+		var needIV: Bool {
+			switch self {
+			case .cbc, .cfb, .ctr, .ofb, .cfb8: return true
+			default: return false
+			}
+		}
 	}
 
 	public enum AuthBlockMode: CCMode {
@@ -678,7 +684,19 @@ public class CC {
 
 	public typealias CCAlgorithm = UInt32
 	public enum Algorithm: CCAlgorithm {
-		case aes = 0, mDES, threeDES, cast, rc4, rc2, blowfish
+		case aes = 0, des, threeDES, cast, rc4, rc2, blowfish
+
+		var blockSize: Int? {
+			switch self {
+			case .aes: return 16
+			case .des: return 8
+			case .threeDES: return 8
+			case .cast: return 8
+			case .rc2: return 8
+			case .blowfish: return 8
+			default: return nil
+			}
+		}
 	}
 
 	public typealias CCPadding = UInt32
@@ -689,6 +707,10 @@ public class CC {
 	public static func crypt(opMode: OpMode, blockMode: BlockMode,
 	                         algorithm: Algorithm, padding: Padding,
 	                         data: NSData, key: NSData, iv: NSData) throws -> NSData {
+		if blockMode.needIV {
+			guard iv.length == algorithm.blockSize else { throw CCError(.paramError) }
+		}
+
 		var cryptor: CCCryptorRef = nil
 		var status = CCCryptorCreateWithMode!(
 			op: opMode.rawValue, mode: blockMode.rawValue,
