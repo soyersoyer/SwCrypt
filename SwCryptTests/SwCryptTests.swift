@@ -14,7 +14,7 @@ class SwCryptTest: XCTestCase {
         super.tearDown()
     }
 
-	static func createKeyPair(size: Int) throws -> (NSData, NSData) {
+	static func createKeyPair(_ size: Int) throws -> (Data, Data) {
 		return try CC.RSA.generateKeyPair(size)
 	}
 
@@ -30,7 +30,7 @@ class SwCryptTest: XCTestCase {
 
 	func testDigest() {
 		XCTAssert(CC.digestAvailable())
-		let testData = "rokafogtacsuka".dataUsingEncoding(NSUTF8StringEncoding)!
+		let testData = "rokafogtacsuka".data(using: String.Encoding.utf8)!
 		let sha1 = "9e421ffa8b2c83ac23e96bc9f9302f4a16311037".dataFromHexadecimalString()!
 		let sha256 = "ae6ab1cf65971f88b9cd92c2f334d6a99beaf5b40240d4b440fdb4a1231db0f0"
 			.dataFromHexadecimalString()!
@@ -51,7 +51,7 @@ class SwCryptTest: XCTestCase {
 
 	func testRandom() {
 		XCTAssert(CC.randomAvailable())
-		CC.generateRandom(10)
+		_ = CC.generateRandom(10)
 	}
 
     func testCreateKeyPair() {
@@ -77,7 +77,7 @@ class SwCryptTest: XCTestCase {
 		XCTAssertNil(try? SwKeyStore.getKey(tag))
 	}
 
-	func encryptKey(enc: SwKeyConvert.PrivateKey.EncMode) {
+	func encryptKey(_ enc: SwKeyConvert.PrivateKey.EncMode) {
 		let pass = "hello"
 		let (priv, _) = keyPair!
 		let privKey = SwKeyConvert.PrivateKey.derToPKCS1PEM(priv)
@@ -95,44 +95,44 @@ class SwCryptTest: XCTestCase {
 	}
 
 	func testKeyNotEncrypted() {
-		let bundle = NSBundle(forClass: self.dynamicType)
-		let decPEM = bundle.objectForInfoDictionaryKey("testPrivDecryptedPEM") as! String
+		let bundle = Bundle(for: type(of: self))
+		let decPEM = bundle.object(forInfoDictionaryKey: "testPrivDecryptedPEM") as! String
 		XCTAssertThrowsError(try SwKeyConvert.PrivateKey.decryptPEM(decPEM, passphrase: "hello")) {
-			XCTAssert($0 as? SwKeyConvert.Error == SwKeyConvert.Error.keyNotEncrypted)
+			XCTAssert($0 as? SwKeyConvert.SwError == SwKeyConvert.SwError.keyNotEncrypted)
 		}
 	}
 
 	func testKeyInvalid() {
-		let bundle = NSBundle(forClass: self.dynamicType)
-		var decPEM = bundle.objectForInfoDictionaryKey("testPrivDecryptedPEM") as! String
+		let bundle = Bundle(for: type(of: self))
+		var decPEM = bundle.object(forInfoDictionaryKey: "testPrivDecryptedPEM") as! String
 		decPEM = "a" + decPEM
 		XCTAssertThrowsError(try SwKeyConvert.PrivateKey.decryptPEM(decPEM, passphrase: "hello")) {
-			XCTAssert($0 as? SwKeyConvert.Error == SwKeyConvert.Error.invalidKey)
+			XCTAssert($0 as? SwKeyConvert.SwError == SwKeyConvert.SwError.invalidKey)
 		}
 	}
 
-	func decryptOpenSSLKeys(type: String) {
-		let bundle = NSBundle(forClass: self.dynamicType)
-		let encPEM = bundle.objectForInfoDictionaryKey("testPrivEncryptedPEMAES" + type) as! String
-		let decPEM = bundle.objectForInfoDictionaryKey("testPrivDecryptedPEM") as! String
+	func decryptOpenSSLKeys(_ type: String) {
+		let bundle = Bundle(for: type(of: self))
+		let encPEM = bundle.object(forInfoDictionaryKey: "testPrivEncryptedPEMAES" + type) as! String
+		let decPEM = bundle.object(forInfoDictionaryKey: "testPrivDecryptedPEM") as! String
 		let d = try? SwKeyConvert.PrivateKey.decryptPEM(encPEM, passphrase: "hello")
 		XCTAssert(d != nil)
 		XCTAssert(d! == decPEM)
 	}
 
-	func decryptOpenSSLKeysBadPassphrase(type: String) {
-		let bundle = NSBundle(forClass: self.dynamicType)
-		let encPEM = bundle.objectForInfoDictionaryKey("testPrivEncryptedPEMAES" + type) as! String
+	func decryptOpenSSLKeysBadPassphrase(_ type: String) {
+		let bundle = Bundle(for: type(of: self))
+		let encPEM = bundle.object(forInfoDictionaryKey: "testPrivEncryptedPEMAES" + type) as! String
 
 		XCTAssertThrowsError(try SwKeyConvert.PrivateKey.decryptPEM(encPEM, passphrase: "nohello")) {
-			XCTAssert($0 as? SwKeyConvert.Error == SwKeyConvert.Error.badPassphrase)
+			XCTAssert($0 as? SwKeyConvert.SwError == SwKeyConvert.SwError.badPassphrase)
 		}
 	}
 
 	func testOpenSSLKeyPair() {
-		let bundle = NSBundle(forClass: self.dynamicType)
-		let priv = bundle.objectForInfoDictionaryKey("testPrivPEM") as! String
-		let pub = bundle.objectForInfoDictionaryKey("testPubPEM") as! String
+		let bundle = Bundle(for: type(of: self))
+		let priv = bundle.object(forInfoDictionaryKey: "testPrivPEM") as! String
+		let pub = bundle.object(forInfoDictionaryKey: "testPubPEM") as! String
 		let privKey = try? SwKeyConvert.PrivateKey.pemToPKCS1DER(priv)
 		XCTAssert(privKey != nil)
 		let pubKey = try? SwKeyConvert.PublicKey.pemToPKCS1DER(pub)
@@ -148,11 +148,11 @@ class SwCryptTest: XCTestCase {
 
 	func testEncryptDecryptOAEPSHA256() {
 		let (priv, pub) = keyPair!
-		let testData = "This is a test string".dataUsingEncoding(NSUTF8StringEncoding)!
+		let testData = "This is a test string".data(using: String.Encoding.utf8)!
 
-		let e = try? CC.RSA.encrypt(testData, derKey: pub, tag: NSData(), padding: .oaep, digest: .sha256)
+		let e = try? CC.RSA.encrypt(testData, derKey: pub, tag: Data(), padding: .oaep, digest: .sha256)
 		XCTAssert(e != nil)
-		let d = try? CC.RSA.decrypt(e!, derKey: priv, tag: NSData(), padding: .oaep, digest: .sha256)
+		let d = try? CC.RSA.decrypt(e!, derKey: priv, tag: Data(), padding: .oaep, digest: .sha256)
 		XCTAssert(d != nil)
 		XCTAssert(testData == d!.0)
 	}
@@ -160,17 +160,17 @@ class SwCryptTest: XCTestCase {
 	func testEncryptDecryptGCM() {
 		let aesKey = CC.generateRandom(32)
 		let iv = CC.generateRandom(12)
-		let testData = "This is a test string".dataUsingEncoding(NSUTF8StringEncoding)!
+		let testData = "This is a test string".data(using: String.Encoding.utf8)!
 
-		let e = try? CC.cryptAuth(.encrypt, blockMode: .gcm, algorithm: .aes, data: testData, aData: NSData(), key: aesKey, iv: iv, tagLength: 8)
+		let e = try? CC.cryptAuth(.encrypt, blockMode: .gcm, algorithm: .aes, data: testData, aData: Data(), key: aesKey, iv: iv, tagLength: 8)
 		XCTAssert(e != nil)
-		let d = try? CC.cryptAuth(.decrypt, blockMode: .gcm, algorithm: .aes, data: e!, aData: NSData(), key: aesKey, iv: iv, tagLength: 8)
+		let d = try? CC.cryptAuth(.decrypt, blockMode: .gcm, algorithm: .aes, data: e!, aData: Data(), key: aesKey, iv: iv, tagLength: 8)
 		XCTAssert(d != nil)
 		XCTAssert(testData == d!)
 	}
 
-	func signVerify(privKey: NSData, pubKey:NSData, padding: CC.RSA.AsymmetricSAPadding) {
-		let testMessage = "rirararom_vagy_rararirom".dataUsingEncoding(NSUTF8StringEncoding)!
+	func signVerify(_ privKey: Data, pubKey:Data, padding: CC.RSA.AsymmetricSAPadding) {
+		let testMessage = "rirararom_vagy_rararirom".data(using: String.Encoding.utf8)!
 		let sign = try? CC.RSA.sign(testMessage, derKey: privKey, padding: padding,
 		                            digest: .sha256, saltLen: 16)
 		XCTAssert(sign != nil)
@@ -186,10 +186,10 @@ class SwCryptTest: XCTestCase {
 	}
 
 	func testCCM() {
-		let data = "hello".dataUsingEncoding(NSUTF8StringEncoding)!
+		let data = "hello".data(using: String.Encoding.utf8)!
 		let key = "8B142BB0FA0043C32821BB90A3453884".dataFromHexadecimalString()!
 		let iv = "B5863BD2ABBED31DC26C4EDB5A".dataFromHexadecimalString()!
-		let aData = "hello".dataUsingEncoding(NSUTF8StringEncoding)!
+		let aData = "hello".data(using: String.Encoding.utf8)!
 		let tagLength = 16
 		XCTAssert(CC.CCM.available())
 
@@ -204,12 +204,12 @@ class SwCryptTest: XCTestCase {
 	}
 
 	func testCCMSJCL() {
-		let data = "hello".dataUsingEncoding(NSUTF8StringEncoding)!
+		let data = "hello".data(using: String.Encoding.utf8)!
 		let key = "8B142BB0FA0043C32821BB90A3453884".dataFromHexadecimalString()!
 		let iv = "B5863BD2ABBED31DC26C4EDB5A".dataFromHexadecimalString()!
-		let aData = "hello".dataUsingEncoding(NSUTF8StringEncoding)!
+		let aData = "hello".data(using: String.Encoding.utf8)!
 		let tagLength = 16
-		let sjclCipher = NSData(base64EncodedString: "VqAna25S22M+yOZz57wCllx7Itql", options: [])!
+		let sjclCipher = Data(base64Encoded: "VqAna25S22M+yOZz57wCllx7Itql", options: [])!
 		XCTAssert(CC.CCM.available())
 
 		let enc = try? CC.cryptAuth(.encrypt, blockMode: .ccm, algorithm: .aes, data: data,
@@ -225,7 +225,7 @@ class SwCryptTest: XCTestCase {
 
 	func testPBKDF2() {
 		let password = "password"
-		let salt = "salt".dataUsingEncoding(NSUTF8StringEncoding)!
+		let salt = "salt".data(using: String.Encoding.utf8)!
 
 		XCTAssert(CC.KeyDerivation.available())
 		let stretched = try? CC.KeyDerivation.PBKDF2(password, salt: salt, prf: .sha256, rounds: 4096)
@@ -306,7 +306,7 @@ class SwCryptTest: XCTestCase {
 
 	func testCRC() {
 		XCTAssert(CC.CRC.available())
-		let input = "abcdefg".dataUsingEncoding(NSUTF8StringEncoding)!
+		let input = "abcdefg".data(using: String.Encoding.utf8)!
 		let expectedOutput: UInt64 = 0x312A6AA6
 		let output = try? CC.CRC.crc(input, mode: .crc32)
 		XCTAssert(output != nil)
@@ -315,7 +315,7 @@ class SwCryptTest: XCTestCase {
 
 	func testCMAC() {
 		XCTAssert(CC.CMAC.available())
-		let input = "abcdefg".dataUsingEncoding(NSUTF8StringEncoding)!
+		let input = "abcdefg".data(using: String.Encoding.utf8)!
 		let key = "8B142BB0FA0043C32821BB90A3453884".dataFromHexadecimalString()!
 		let expectedOutput = "a7903c21aaa33db4c8ad7b23a947e0bd".dataFromHexadecimalString()!
 		let cmac = CC.CMAC.AESCMAC(input, key: key)
