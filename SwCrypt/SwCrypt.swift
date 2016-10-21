@@ -12,6 +12,7 @@ open class SwKeyStore {
 		case itemNotFound = -25300
 		case interactionNotAllowed = -25308
 		case decode = -26275
+		case missingEntitlement = -34018
 
 		public static var debugLevel = 1
 
