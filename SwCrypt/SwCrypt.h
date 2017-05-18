@@ -1,4 +1,4 @@
-#import <UIKit/UIKit.h>
+#import <Foundation/Foundation.h>
 
 //! Project version number for SwCrypt.
 FOUNDATION_EXPORT double SwCryptVersionNumber;
