@@ -1058,6 +1058,20 @@ open class CC {
 
 			return (privDERKey, pubDERKey)
 		}
+        
+        open static func getPublicKeyFromPrivateKey(_ derKey: Data) throws -> Data {
+            let key = try importFromDERKey(derKey)
+            defer { CCRSACryptorRelease!(key) }
+        
+            guard getKeyType(key) == .privateKey else { throw CCError(.paramError) }
+            
+            let publicKey = CCRSACryptorGetPublicKeyFromPrivateKey!(key)
+            defer {CCRSACryptorRelease!(publicKey)}
+            
+            let pubDERKey = try exportToDERKey(publicKey)
+            
+            return pubDERKey
+        }
 
 		open static func encrypt(_ data: Data, derKey: Data, tag: Data, padding: AsymmetricPadding,
 		                           digest: DigestAlgorithm) throws -> Data {
@@ -1383,6 +1397,7 @@ open class CC {
 
 		open static func available() -> Bool {
 			return CCRSACryptorGeneratePair != nil &&
+                CCRSACryptorGetPublicKeyFromPrivateKey != nil &&
 				CCRSACryptorRelease != nil &&
 				CCRSAGetKeyType != nil &&
 				CCRSAGetKeySize != nil &&
@@ -1411,6 +1426,10 @@ open class CC {
 		fileprivate static let CCRSACryptorGeneratePair: CCRSACryptorGeneratePairT? =
 			getFunc(CC.dl!, f: "CCRSACryptorGeneratePair")
 
+        fileprivate typealias CCRSACryptorGetPublicKeyFromPrivateKeyT = @convention(c) (CCRSACryptorRef) -> CCRSACryptorRef
+        fileprivate static let CCRSACryptorGetPublicKeyFromPrivateKey: CCRSACryptorGetPublicKeyFromPrivateKeyT? =
+            getFunc(CC.dl!, f: "CCRSACryptorGetPublicKeyFromPrivateKey")
+        
 		fileprivate typealias CCRSACryptorReleaseT = @convention(c) (CCRSACryptorRef) -> Void
 		fileprivate static let CCRSACryptorRelease: CCRSACryptorReleaseT? =
 			getFunc(dl!, f: "CCRSACryptorRelease")

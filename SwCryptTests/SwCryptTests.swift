@@ -145,6 +145,16 @@ class SwCryptTest: XCTestCase {
 		decryptOpenSSLKeysBadPassphrase("128")
 		decryptOpenSSLKeysBadPassphrase("256")
 	}
+    
+    func testGetPublicKeyFromPrivateKey() {
+        let bundle = Bundle(for: type(of: self))
+        let priv = bundle.object(forInfoDictionaryKey: "testPrivPEM") as! String
+        let pub = bundle.object(forInfoDictionaryKey: "testPubPEM") as! String
+        let privKey = try? SwKeyConvert.PrivateKey.pemToPKCS1DER(priv)
+        let pubKey = try? SwKeyConvert.PublicKey.pemToPKCS1DER(pub)
+        let genPubKey = try? CC.RSA.getPublicKeyFromPrivateKey(privKey!)
+            XCTAssert(pubKey == genPubKey)
+    }
 
 	func testEncryptDecryptOAEPSHA256() {
 		let (priv, pub) = keyPair!
