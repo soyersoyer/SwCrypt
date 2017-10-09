@@ -455,8 +455,7 @@ open class PEM {
 				throw SwError(.parse("iv"))
 			}
 			let aesKey = getAESKey(mode, passphrase: passphrase, iv: iv)
-            let base64Data = strippedKey.substring(
-                from: strippedKey.index(strippedKey.startIndex, offsetBy:aesHeaderLength))
+            let base64Data = String(strippedKey[strippedKey.index(strippedKey.startIndex, offsetBy: aesHeaderLength)...])
 			guard let data = PEM.base64Decode(base64Data) else {
 				throw SwError(.parse("base64decode"))
 			}
@@ -505,10 +504,7 @@ open class PEM {
 		}
 
 		fileprivate static func getIV(_ strippedKey: String) -> Data? {
-			let ivInHex = strippedKey.substring(
-				with: strippedKey.index(strippedKey.startIndex,
-				                        offsetBy:aesInfoLength) ..< strippedKey.index(strippedKey.startIndex,
-				                                                                      offsetBy:aesHeaderLength))
+			let ivInHex = String(strippedKey[strippedKey.index(strippedKey.startIndex, offsetBy: aesInfoLength) ..< strippedKey.index(strippedKey.startIndex, offsetBy: aesHeaderLength)])
 			return ivInHex.dataFromHexadecimalString()
 		}
 
@@ -569,7 +565,7 @@ open class PEM {
 		guard let r = data.range(of: footer) else {
 			return nil
 		}
-		return data.substring(with: header.endIndex..<r.lowerBound)
+		return String(data[header.endIndex ..< r.lowerBound])
 	}
 
 	fileprivate static func base64Decode(_ base64Data: String) -> Data? {
@@ -2123,7 +2119,7 @@ extension String {
         var index: String.Index? = trimmedString.startIndex
         
         while let i = index {
-            let byteString = trimmedString.substring(with: i ..< trimmedString.index(i, offsetBy: 2))
+            let byteString = String(trimmedString[i ..< trimmedString.index(i, offsetBy: 2)])
             let num = UInt8(byteString.withCString { strtoul($0, nil, 16) })
             data.append([num] as [UInt8], count: 1)
             

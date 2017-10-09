@@ -112,7 +112,7 @@ class SwCryptTest: XCTestCase {
 	}
 
 	func decryptOpenSSLKeys(_ type: String) {
-		let bundle = Bundle(for: type(of: self))
+		let bundle = Bundle(for: Swift.type(of: self))
 		let encPEM = bundle.object(forInfoDictionaryKey: "testPrivEncryptedPEMAES" + type) as! String
 		let decPEM = bundle.object(forInfoDictionaryKey: "testPrivDecryptedPEM") as! String
 		let d = try? SwKeyConvert.PrivateKey.decryptPEM(encPEM, passphrase: "hello")
@@ -121,7 +121,7 @@ class SwCryptTest: XCTestCase {
 	}
 
 	func decryptOpenSSLKeysBadPassphrase(_ type: String) {
-		let bundle = Bundle(for: type(of: self))
+		let bundle = Bundle(for: Swift.type(of: self))
 		let encPEM = bundle.object(forInfoDictionaryKey: "testPrivEncryptedPEMAES" + type) as! String
 
 		XCTAssertThrowsError(try SwKeyConvert.PrivateKey.decryptPEM(encPEM, passphrase: "nohello")) {
