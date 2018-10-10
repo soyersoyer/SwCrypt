@@ -30,7 +30,7 @@ open class SwKeyStore {
 		}
 	}
 
-	open static func upsertKey(_ pemKey: String, keyTag: String,
+    public static func upsertKey(_ pemKey: String, keyTag: String,
 	                             options: [NSString : AnyObject] = [:]) throws {
 		let pemKeyAsData = pemKey.data(using: String.Encoding.utf8)!
 
@@ -53,7 +53,7 @@ open class SwKeyStore {
 		guard status == errSecSuccess else { throw SecError(status) }
 	}
 
-	open static func getKey(_ keyTag: String) throws -> String {
+    public static func getKey(_ keyTag: String) throws -> String {
 		let parameters: [NSString : AnyObject] = [
 			kSecClass : kSecClassKey,
 			kSecAttrKeyType : kSecAttrKeyTypeRSA,
@@ -73,7 +73,7 @@ open class SwKeyStore {
 		return result
 	}
 
-	open static func delKey(_ keyTag: String) throws {
+    public static func delKey(_ keyTag: String) throws {
 		let parameters: [NSString : AnyObject] = [
 			kSecClass : kSecClassKey,
 			kSecAttrApplicationTag: keyTag as AnyObject
@@ -102,7 +102,7 @@ open class SwKeyConvert {
 
 	open class PrivateKey {
 
-		open static func pemToPKCS1DER(_ pemKey: String) throws -> Data {
+        public static func pemToPKCS1DER(_ pemKey: String) throws -> Data {
 			guard let derKey = try? PEM.PrivateKey.toDER(pemKey) else {
 				throw SwError(.invalidKey)
 			}
@@ -112,13 +112,13 @@ open class SwKeyConvert {
 			return pkcs1DERKey
 		}
 
-		open static func derToPKCS1PEM(_ derKey: Data) -> String {
+        public static func derToPKCS1PEM(_ derKey: Data) -> String {
 			return PEM.PrivateKey.toPEM(derKey)
 		}
 
 		public typealias EncMode = PEM.EncryptedPrivateKey.EncMode
 
-		open static func encryptPEM(_ pemKey: String, passphrase: String,
+        public static func encryptPEM(_ pemKey: String, passphrase: String,
 		                              mode: EncMode) throws -> String {
 			do {
 				let derKey = try PEM.PrivateKey.toDER(pemKey)
@@ -128,7 +128,7 @@ open class SwKeyConvert {
 			}
 		}
 
-		open static func decryptPEM(_ pemKey: String, passphrase: String) throws -> String {
+        public static func decryptPEM(_ pemKey: String, passphrase: String) throws -> String {
 			do {
 				let derKey = try PEM.EncryptedPrivateKey.toDER(pemKey, passphrase: passphrase)
 				return PEM.PrivateKey.toPEM(derKey)
@@ -144,7 +144,7 @@ open class SwKeyConvert {
 
 	open class PublicKey {
 
-		open static func pemToPKCS1DER(_ pemKey: String) throws -> Data {
+        public static func pemToPKCS1DER(_ pemKey: String) throws -> Data {
 			guard let derKey = try? PEM.PublicKey.toDER(pemKey) else {
 				throw SwError(.invalidKey)
 			}
@@ -154,11 +154,11 @@ open class SwKeyConvert {
 			return pkcs1DERKey
 		}
 
-		open static func derToPKCS1PEM(_ derKey: Data) -> String {
+        public static func derToPKCS1PEM(_ derKey: Data) -> String {
 			return PEM.PublicKey.toPEM(derKey)
 		}
 
-		open static func derToPKCS8PEM(_ derKey: Data) -> String {
+        public static func derToPKCS8PEM(_ derKey: Data) -> String {
 			let pkcs8Key = PKCS8.PublicKey.addHeader(derKey)
 			return PEM.PublicKey.toPEM(pkcs8Key)
 		}
@@ -172,7 +172,7 @@ open class PKCS8 {
 	open class PrivateKey {
 
 		//https://lapo.it/asn1js/
-		open static func getPKCS1DEROffset(_ derKey: Data) -> Int? {
+        public static func getPKCS1DEROffset(_ derKey: Data) -> Int? {
 			let bytes = derKey.bytesView
 
 			var offset = 0
@@ -225,14 +225,14 @@ open class PKCS8 {
 			return offset
 		}
 
-		open static func stripHeaderIfAny(_ derKey: Data) -> Data? {
+        public static func stripHeaderIfAny(_ derKey: Data) -> Data? {
 			guard let offset = getPKCS1DEROffset(derKey) else {
 				return nil
 			}
 			return derKey.subdata(in: offset..<derKey.count)
 		}
 
-		open static func hasCorrectHeader(_ derKey: Data) -> Bool {
+        public static func hasCorrectHeader(_ derKey: Data) -> Bool {
 			return getPKCS1DEROffset(derKey) != nil
 		}
 
@@ -240,7 +240,7 @@ open class PKCS8 {
 
 	open class PublicKey {
 
-		open static func addHeader(_ derKey: Data) -> Data {
+        public static func addHeader(_ derKey: Data) -> Data {
 			var result = Data()
 
 			let encodingLength: Int = encodedOctets(derKey.count + 1).count
@@ -272,7 +272,7 @@ open class PKCS8 {
 		}
 
 		//https://lapo.it/asn1js/
-		open static func getPKCS1DEROffset(_ derKey: Data) -> Int? {
+        public static func getPKCS1DEROffset(_ derKey: Data) -> Int? {
 			let bytes = derKey.bytesView
 
 			var offset = 0
@@ -324,14 +324,14 @@ open class PKCS8 {
 			return offset
 		}
 
-		open static func stripHeaderIfAny(_ derKey: Data) -> Data? {
+        public static func stripHeaderIfAny(_ derKey: Data) -> Data? {
 			guard let offset = getPKCS1DEROffset(derKey) else {
 				return nil
 			}
 			return derKey.subdata(in: offset..<derKey.count)
 		}
 
-		open static func hasCorrectHeader(_ derKey: Data) -> Bool {
+        public static func hasCorrectHeader(_ derKey: Data) -> Bool {
 			return getPKCS1DEROffset(derKey) != nil
 		}
 
@@ -375,7 +375,7 @@ open class PEM {
 
 	open class PrivateKey {
 
-		open static func toDER(_ pemKey: String) throws -> Data {
+        public static func toDER(_ pemKey: String) throws -> Data {
 			guard let strippedKey = stripHeader(pemKey) else {
 				throw SwError(.parse("header"))
 			}
@@ -385,7 +385,7 @@ open class PEM {
 			return data
 		}
 
-		open static func toPEM(_ derKey: Data) -> String {
+        public static func toPEM(_ derKey: Data) -> String {
 			let base64 = PEM.base64Encode(derKey)
 			return addRSAHeader(base64)
 		}
@@ -411,7 +411,7 @@ open class PEM {
 
 	open class PublicKey {
 
-		open static func toDER(_ pemKey: String) throws -> Data {
+        public static func toDER(_ pemKey: String) throws -> Data {
 			guard let strippedKey = stripHeader(pemKey) else {
 				throw SwError(.parse("header"))
 			}
@@ -421,7 +421,7 @@ open class PEM {
 			return data
 		}
 
-		open static func toPEM(_ derKey: Data) -> String {
+        public static func toPEM(_ derKey: Data) -> String {
 			let base64 = PEM.base64Encode(derKey)
 			return addHeader(base64)
 		}
@@ -444,7 +444,7 @@ open class PEM {
 			case aes128CBC, aes256CBC
 		}
 
-		open static func toDER(_ pemKey: String, passphrase: String) throws -> Data {
+        public static func toDER(_ pemKey: String, passphrase: String) throws -> Data {
 			guard let strippedKey = PrivateKey.stripHeader(pemKey) else {
 				throw SwError(.parse("header"))
 			}
@@ -468,7 +468,7 @@ open class PEM {
 			return decrypted
 		}
 
-		open static func toPEM(_ derKey: Data, passphrase: String, mode: EncMode) -> String {
+        public static func toPEM(_ derKey: Data, passphrase: String, mode: EncMode) -> String {
 			let iv = CC.generateRandom(16)
 			let aesKey = getAESKey(mode, passphrase: passphrase, iv: iv)
 			let encrypted = encryptKey(derKey, key: aesKey, iv: iv)
@@ -609,7 +609,7 @@ open class CC {
 		}
 	}
 
-	open static func generateRandom(_ size: Int) -> Data {
+    public static func generateRandom(_ size: Int) -> Data {
 		var data = Data(count: size)
         data.withUnsafeMutableBytes { (dataBytes: UnsafeMutablePointer<UInt8>) -> Void in
             _ = CCRandomGenerateBytes!(dataBytes, size)
@@ -630,7 +630,7 @@ open class CC {
 		}
 	}
 
-	open static func digest(_ data: Data, alg: DigestAlgorithm) -> Data {
+    public static func digest(_ data: Data, alg: DigestAlgorithm) -> Data {
 		var output = Data(count: alg.length)
         output.withUnsafeMutableBytes { (outputBytes: UnsafeMutablePointer<UInt8>) -> Void in
             _ = CCDigest!(alg.rawValue,
@@ -657,7 +657,7 @@ open class CC {
 		}
 	}
 
-	open static func HMAC(_ data: Data, alg: HMACAlg, key: Data) -> Data {
+    public static func HMAC(_ data: Data, alg: HMACAlg, key: Data) -> Data {
 		var buffer = Data(count: alg.digestLength)
         buffer.withUnsafeMutableBytes { (bufferBytes: UnsafeMutablePointer<UInt8>) -> Void in
             CCHmac!(alg.rawValue,
@@ -710,7 +710,7 @@ open class CC {
 		case noPadding = 0, pkcs7Padding
 	}
 
-	open static func crypt(_ opMode: OpMode, blockMode: BlockMode,
+    public static func crypt(_ opMode: OpMode, blockMode: BlockMode,
 	                         algorithm: Algorithm, padding: Padding,
 	                         data: Data, key: Data, iv: Data) throws -> Data {
 		if blockMode.needIV {
@@ -730,12 +730,13 @@ open class CC {
 
 		let needed = CCCryptorGetOutputLength!(cryptor!, data.count, true)
 		var result = Data(count: needed)
+        let rescount = result.count
 		var updateLen: size_t = 0
         status = result.withUnsafeMutableBytes({ (resultBytes: UnsafeMutablePointer<UInt8>) -> CCCryptorStatus in
             return CCCryptorUpdate!(
                 cryptor!,
                 (data as NSData).bytes, data.count,
-                resultBytes, result.count,
+                resultBytes, rescount,
                 &updateLen)
         })
 		guard status == noErr else { throw CCError(status) }
@@ -746,7 +747,7 @@ open class CC {
             return CCCryptorFinal!(
                 cryptor!,
                 resultBytes + updateLen,
-                result.count - updateLen,
+                rescount - updateLen,
                 &finalLen)
         })
 		guard status == noErr else { throw CCError(status) }
@@ -758,7 +759,7 @@ open class CC {
 
 	//The same behaviour as in the CCM pdf
 	//http://csrc.nist.gov/publications/nistpubs/800-38C/SP800-38C_updated-July20_2007.pdf
-	open static func cryptAuth(_ opMode: OpMode, blockMode: AuthBlockMode, algorithm: Algorithm,
+    public static func cryptAuth(_ opMode: OpMode, blockMode: AuthBlockMode, algorithm: Algorithm,
 	                             data: Data, aData: Data,
 	                             key: Data, iv: Data, tagLength: Int) throws -> Data {
 		let cryptFun = blockMode == .gcm ? GCM.crypt : CCM.crypt
@@ -781,20 +782,20 @@ open class CC {
 		}
 	}
 
-	open static func digestAvailable() -> Bool {
+    public static func digestAvailable() -> Bool {
 		return CCDigest != nil &&
 			CCDigestGetOutputSize != nil
 	}
 
-	open static func randomAvailable() -> Bool {
+    public static func randomAvailable() -> Bool {
 		return CCRandomGenerateBytes != nil
 	}
 
-	open static func hmacAvailable() -> Bool {
+    public static func hmacAvailable() -> Bool {
 		return CCHmac != nil
 	}
 
-	open static func cryptorAvailable() -> Bool {
+    public static func cryptorAvailable() -> Bool {
 		return CCCryptorCreateWithMode != nil &&
 			CCCryptorGetOutputLength != nil &&
 			CCCryptorUpdate != nil &&
@@ -802,7 +803,7 @@ open class CC {
 			CCCryptorRelease != nil
 	}
 
-	open static func available() -> Bool {
+    public static func available() -> Bool {
 		return digestAvailable() &&
 			randomAvailable() &&
 			hmacAvailable() &&
@@ -891,7 +892,7 @@ open class CC {
 
 	open class GCM {
 
-		open static func crypt(_ opMode: OpMode, algorithm: Algorithm, data: Data,
+        public static func crypt(_ opMode: OpMode, algorithm: Algorithm, data: Data,
 		                         key: Data, iv: Data,
 		                         aData: Data, tagLength: Int) throws -> (Data, Data) {
 			var result = Data(count: data.count)
@@ -913,7 +914,7 @@ open class CC {
 			return (result, tag)
 		}
 
-		open static func available() -> Bool {
+        public static func available() -> Bool {
 			if CCCryptorGCM != nil {
 				return true
 			}
@@ -933,7 +934,7 @@ open class CC {
 
 	open class CCM {
 
-		open static func crypt(_ opMode: OpMode, algorithm: Algorithm, data: Data,
+        public static func crypt(_ opMode: OpMode, algorithm: Algorithm, data: Data,
 		                         key: Data, iv: Data,
 		                         aData: Data, tagLength: Int) throws -> (Data, Data) {
 			var cryptor: CCCryptorRef? = nil
@@ -962,12 +963,12 @@ open class CC {
 			guard status == noErr else { throw CCError(status) }
 
 			var result = Data(count: data.count)
-
+            let rescount = result.count
 			var updateLen: size_t = 0
             status = result.withUnsafeMutableBytes({ (resultBytes: UnsafeMutablePointer<UInt8>) -> CCCryptorStatus in
                 return CCCryptorUpdate!(
                     cryptor!, (data as NSData).bytes, data.count,
-                    resultBytes, result.count,
+                    resultBytes, rescount,
                     &updateLen)
             })
 			guard status == noErr else { throw CCError(status) }
@@ -975,7 +976,7 @@ open class CC {
 			var finalLen: size_t = 0
             status = result.withUnsafeMutableBytes({ (resultBytes: UnsafeMutablePointer<UInt8>) -> CCCryptorStatus in
                 return CCCryptorFinal!(cryptor!, resultBytes + updateLen,
-                                       result.count - updateLen,
+                                       rescount - updateLen,
                                        &finalLen)
             })
 			guard status == noErr else { throw CCError(status) }
@@ -995,7 +996,7 @@ open class CC {
 			return (result, tag)
 		}
 
-		open static func available() -> Bool {
+        public static func available() -> Bool {
 			if CCCryptorAddParameter != nil &&
 				CCCryptorGetParameter != nil {
 				return true
@@ -1034,7 +1035,7 @@ open class CC {
 			case pss = 1002
 		}
 
-		open static func generateKeyPair(_ keySize: Int = 4096) throws -> (Data, Data) {
+        public static func generateKeyPair(_ keySize: Int = 4096) throws -> (Data, Data) {
 			var privateKey: CCRSACryptorRef? = nil
 			var publicKey: CCRSACryptorRef? = nil
 			let status = CCRSACryptorGeneratePair!(
@@ -1055,7 +1056,7 @@ open class CC {
 			return (privDERKey, pubDERKey)
 		}
         
-        open static func getPublicKeyFromPrivateKey(_ derKey: Data) throws -> Data {
+        public static func getPublicKeyFromPrivateKey(_ derKey: Data) throws -> Data {
             let key = try importFromDERKey(derKey)
             defer { CCRSACryptorRelease!(key) }
         
@@ -1069,7 +1070,7 @@ open class CC {
             return pubDERKey
         }
 
-		open static func encrypt(_ data: Data, derKey: Data, tag: Data, padding: AsymmetricPadding,
+        public static func encrypt(_ data: Data, derKey: Data, tag: Data, padding: AsymmetricPadding,
 		                           digest: DigestAlgorithm) throws -> Data {
 			let key = try importFromDERKey(derKey)
 			defer { CCRSACryptorRelease!(key) }
@@ -1096,7 +1097,7 @@ open class CC {
 			return buffer
 		}
 
-		open static func decrypt(_ data: Data, derKey: Data, tag: Data, padding: AsymmetricPadding,
+        public static func decrypt(_ data: Data, derKey: Data, tag: Data, padding: AsymmetricPadding,
 		                           digest: DigestAlgorithm) throws -> (Data, Int) {
 			let key = try importFromDERKey(derKey)
 			defer { CCRSACryptorRelease!(key) }
@@ -1156,7 +1157,7 @@ open class CC {
 			return Int(CCRSAGetKeySize!(key)/8)
 		}
 
-		open static func sign(_ message: Data, derKey: Data, padding: AsymmetricSAPadding,
+        public static func sign(_ message: Data, derKey: Data, padding: AsymmetricSAPadding,
 		                        digest: DigestAlgorithm, saltLen: Int) throws -> Data {
 			let key = try importFromDERKey(derKey)
 			defer { CCRSACryptorRelease!(key) }
@@ -1192,7 +1193,7 @@ open class CC {
 			}
 		}
 
-		open static func verify(_ message: Data, derKey: Data, padding: AsymmetricSAPadding,
+        public static func verify(_ message: Data, derKey: Data, padding: AsymmetricSAPadding,
 		                          digest: DigestAlgorithm, saltLen: Int,
 		                          signedData: Data) throws -> Bool {
 			let key = try importFromDERKey(derKey)
@@ -1274,10 +1275,11 @@ open class CC {
 			precondition(data1.count == data2.count)
 
             var ret = Data(count: data1.count)
+            let retcount = ret.count
             ret.withUnsafeMutableBytes { (r: UnsafeMutablePointer<UInt8>) -> Void in
                 let bytes1 = (data1 as NSData).bytes.bindMemory(to: UInt8.self, capacity: data1.count)
                 let bytes2 = (data2 as NSData).bytes.bindMemory(to: UInt8.self, capacity: data2.count)
-                for i in 0 ..< ret.count {
+                for i in 0 ..< retcount {
                     r[i] = bytes1[i] ^ bytes2[i]
                 }
             }
@@ -1391,7 +1393,7 @@ open class CC {
 		}
 
 
-		open static func available() -> Bool {
+        public static func available() -> Bool {
 			return CCRSACryptorGeneratePair != nil &&
                 CCRSACryptorGetPublicKeyFromPrivateKey != nil &&
 				CCRSACryptorRelease != nil &&
@@ -1563,7 +1565,7 @@ open class CC {
 		}
 
 
-		open static func available() -> Bool {
+        public static func available() -> Bool {
 			return CCDHCreate != nil &&
 				CCDHRelease != nil &&
 				CCDHGenerateKey != nil &&
@@ -1600,7 +1602,7 @@ open class CC {
 
 	open class EC {
 
-		open static func generateKeyPair(_ keySize: Int) throws -> (Data, Data) {
+        public static func generateKeyPair(_ keySize: Int) throws -> (Data, Data) {
 			var privKey: CCECCryptorRef? = nil
 			var pubKey: CCECCryptorRef? = nil
 			let status = CCECCryptorGeneratePair!(
@@ -1619,7 +1621,7 @@ open class CC {
 			return (privKeyDER, pubKeyDER)
 		}
 
-		open static func signHash(_ privateKey: Data, hash: Data) throws -> Data {
+        public static func signHash(_ privateKey: Data, hash: Data) throws -> Data {
 			let privKey = try importKey(privateKey, format: .importKeyBinary, keyType: .keyPrivate)
 			defer { CCECCryptorRelease!(privKey) }
 
@@ -1638,7 +1640,7 @@ open class CC {
 			return signedData
 		}
 
-		open static func verifyHash(_ publicKey: Data,
+        public static func verifyHash(_ publicKey: Data,
 		                              hash: Data,
 		                              signedData: Data) throws -> Bool {
 			let pubKey = try importKey(publicKey, format: .importKeyBinary, keyType: .keyPublic)
@@ -1655,7 +1657,7 @@ open class CC {
 			return valid != 0
 		}
 
-		open static func computeSharedSecret(_ privateKey: Data,
+        public static func computeSharedSecret(_ privateKey: Data,
 		                                       publicKey: Data) throws -> Data {
 			let privKey = try importKey(privateKey, format: .importKeyBinary, keyType: .keyPrivate)
 			let pubKey = try importKey(publicKey, format: .importKeyBinary, keyType: .keyPublic)
@@ -1706,7 +1708,7 @@ open class CC {
 			return expKey
 		}
 
-		open static func available() -> Bool {
+        public static func available() -> Bool {
 			return CCECCryptorGeneratePair != nil &&
 				CCECCryptorImportKey != nil &&
 				CCECCryptorExportKey != nil &&
@@ -1813,7 +1815,7 @@ open class CC {
 			crc64ECMA182 = 60
 		}
 
-		open static func crc(_ input: Data, mode: Mode) throws -> UInt64 {
+        public static func crc(_ input: Data, mode: Mode) throws -> UInt64 {
 			var result: UInt64 = 0
 			let status = CNCRC!(
 				mode.rawValue,
@@ -1825,7 +1827,7 @@ open class CC {
 			return result
 		}
 
-		open static func available() -> Bool {
+        public static func available() -> Bool {
 			return CNCRC != nil
 		}
 
@@ -1838,7 +1840,7 @@ open class CC {
 
 	open class CMAC {
 
-		open static func AESCMAC(_ data: Data, key: Data) -> Data {
+        public static func AESCMAC(_ data: Data, key: Data) -> Data {
 			var result = Data(count: 16)
             result.withUnsafeMutableBytes { (resultBytes: UnsafeMutablePointer<UInt8>) -> Void in
                 CCAESCmac!((key as NSData).bytes,
@@ -1848,7 +1850,7 @@ open class CC {
 			return result
 		}
 
-		open static func available() -> Bool {
+        public static func available() -> Bool {
 			return CCAESCmac != nil
 		}
 
@@ -1875,10 +1877,11 @@ open class CC {
 			}
 		}
 
-		open static func PBKDF2(_ password: String, salt: Data,
+        public static func PBKDF2(_ password: String, salt: Data,
 		                         prf: PRFAlg, rounds: UInt32) throws -> Data {
 
 			var result = Data(count:prf.cc.digestLength)
+            let rescount = result.count
 			let passwData = password.data(using: String.Encoding.utf8)!
             let status = result.withUnsafeMutableBytes {
                 (passwDataBytes: UnsafeMutablePointer<UInt8>) -> CCCryptorStatus in
@@ -1886,14 +1889,14 @@ open class CC {
                                              (passwData as NSData).bytes, passwData.count,
                                              (salt as NSData).bytes, salt.count,
                                              prf.rawValue, rounds,
-                                             passwDataBytes, result.count)
+                                             passwDataBytes, rescount)
             }
 			guard status == noErr else { throw CCError(status) }
 
 			return result
 		}
 
-		open static func available() -> Bool {
+        public static func available() -> Bool {
 			return CCKeyDerivationPBKDF != nil
 		}
 
@@ -1915,9 +1918,9 @@ open class CC {
 	open class KeyWrap {
 
 		fileprivate static let rfc3394IVData: [UInt8] = [0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6]
-		open static let rfc3394IV = Data(bytes: UnsafePointer<UInt8>(rfc3394IVData), count:rfc3394IVData.count)
+        public static let rfc3394IV = Data(bytes: UnsafePointer<UInt8>(rfc3394IVData), count:rfc3394IVData.count)
 
-		open static func SymmetricKeyWrap(_ iv: Data,
+        public static func SymmetricKeyWrap(_ iv: Data,
 		                                    kek: Data,
 		                                    rawKey: Data) throws -> Data {
 			let alg = WrapAlg.aes.rawValue
@@ -1938,7 +1941,7 @@ open class CC {
 			return wrappedKey
 		}
 
-		open static func SymmetricKeyUnwrap(_ iv: Data,
+        public static func SymmetricKeyUnwrap(_ iv: Data,
 		                                      kek: Data,
 		                                      wrappedKey: Data) throws -> Data {
 			let alg = WrapAlg.aes.rawValue
@@ -1959,7 +1962,7 @@ open class CC {
 			return rawKey
 		}
 
-		open static func available() -> Bool {
+        public static func available() -> Bool {
 			return CCSymmetricKeyWrap != nil &&
 				CCSymmetricKeyUnwrap != nil &&
 				CCSymmetricWrappedSize != nil &&
