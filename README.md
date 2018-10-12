@@ -22,6 +22,10 @@ let publicKeyDER = SwKeyConvert.PublicKey.pemToPKCS1DER(publicKeyPEM)
 try SwKeyConvert.PrivateKey.encryptPEM(privateKeyPEM, passphrase: "longpassword", mode: .aes256CBC)
 try SwKeyConvert.PrivateKey.decryptPEM(privEncrypted, passphrase: "longpassword")
 ```
+### Get public key from private keys in DER format
+```
+let publicKeyDER = try? CC.RSA.getPublicKeyFromPrivateKey(privateKeyDER!)
+```
 ### Encrypt, decrypt data with RSA
 ```
 try CC.RSA.encrypt(data, derKey: publicKey, tag: tag, padding: .oaep, digest: .sha1)

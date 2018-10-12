@@ -112,7 +112,7 @@ class SwCryptTest: XCTestCase {
 	}
 
 	func decryptOpenSSLKeys(_ type: String) {
-		let bundle = Bundle(for: type(of: self))
+		let bundle = Bundle(for: Swift.type(of: self))
 		let encPEM = bundle.object(forInfoDictionaryKey: "testPrivEncryptedPEMAES" + type) as! String
 		let decPEM = bundle.object(forInfoDictionaryKey: "testPrivDecryptedPEM") as! String
 		let d = try? SwKeyConvert.PrivateKey.decryptPEM(encPEM, passphrase: "hello")
@@ -121,7 +121,7 @@ class SwCryptTest: XCTestCase {
 	}
 
 	func decryptOpenSSLKeysBadPassphrase(_ type: String) {
-		let bundle = Bundle(for: type(of: self))
+		let bundle = Bundle(for: Swift.type(of: self))
 		let encPEM = bundle.object(forInfoDictionaryKey: "testPrivEncryptedPEMAES" + type) as! String
 
 		XCTAssertThrowsError(try SwKeyConvert.PrivateKey.decryptPEM(encPEM, passphrase: "nohello")) {
@@ -145,6 +145,16 @@ class SwCryptTest: XCTestCase {
 		decryptOpenSSLKeysBadPassphrase("128")
 		decryptOpenSSLKeysBadPassphrase("256")
 	}
+    
+    func testGetPublicKeyFromPrivateKey() {
+        let bundle = Bundle(for: type(of: self))
+        let priv = bundle.object(forInfoDictionaryKey: "testPrivPEM") as! String
+        let pub = bundle.object(forInfoDictionaryKey: "testPubPEM") as! String
+        let privKey = try? SwKeyConvert.PrivateKey.pemToPKCS1DER(priv)
+        let pubKey = try? SwKeyConvert.PublicKey.pemToPKCS1DER(pub)
+        let genPubKey = try? CC.RSA.getPublicKeyFromPrivateKey(privKey!)
+            XCTAssert(pubKey == genPubKey)
+    }
 
 	func testEncryptDecryptOAEPSHA256() {
 		let (priv, pub) = keyPair!
