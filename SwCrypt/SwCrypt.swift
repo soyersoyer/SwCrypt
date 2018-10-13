@@ -1,5 +1,3 @@
-import Foundation
-
 open class SwKeyStore {
 
 	public enum SecError: OSStatus, Error {
