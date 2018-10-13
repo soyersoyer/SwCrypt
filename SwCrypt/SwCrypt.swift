@@ -478,7 +478,7 @@ open class PEM {
 
 		fileprivate static let aes128CBCInfo = "Proc-Type: 4,ENCRYPTED\nDEK-Info: AES-128-CBC,"
 		fileprivate static let aes256CBCInfo = "Proc-Type: 4,ENCRYPTED\nDEK-Info: AES-256-CBC,"
-		fileprivate static let aesInfoLength = aes128CBCInfo.characters.count
+		fileprivate static let aesInfoLength = aes128CBCInfo.count
 		fileprivate static let aesIVInHexLength = 32
 		fileprivate static let aesHeaderLength = aesInfoLength + aesIVInHexLength
 
@@ -2117,27 +2117,27 @@ extension String {
 		let regex = try! NSRegularExpression(pattern: "^[0-9a-f]*$", options: .caseInsensitive)
 
 		let found = regex.firstMatch(in: trimmedString, options: [],
-		                                     range: NSRange(location: 0,
-												length: trimmedString.characters.count))
+									 range: NSRange(location: 0,
+													length: trimmedString.count))
 		guard found != nil &&
 			found?.range.location != NSNotFound &&
-			trimmedString.characters.count % 2 == 0 else {
+			trimmedString.count % 2 == 0 else {
 				return nil
 		}
 
 		// everything ok, so now let's build Data
 
-		var data = Data(capacity: trimmedString.characters.count / 2)
-        var index: String.Index? = trimmedString.startIndex
-        
-        while let i = index {
-            let byteString = String(trimmedString[i ..< trimmedString.index(i, offsetBy: 2)])
-            let num = UInt8(byteString.withCString { strtoul($0, nil, 16) })
-            data.append([num] as [UInt8], count: 1)
-            
-            index = trimmedString.index(i, offsetBy: 2, limitedBy: trimmedString.endIndex)
-            if index == trimmedString.endIndex { break }
-        }
+		var data = Data(capacity: trimmedString.count / 2)
+		var index: String.Index? = trimmedString.startIndex
+
+		while let i = index {
+			let byteString = String(trimmedString[i ..< trimmedString.index(i, offsetBy: 2)])
+			let num = UInt8(byteString.withCString { strtoul($0, nil, 16) })
+			data.append([num] as [UInt8], count: 1)
+
+			index = trimmedString.index(i, offsetBy: 2, limitedBy: trimmedString.endIndex)
+			if index == trimmedString.endIndex { break }
+		}
 
 		return data
 	}
