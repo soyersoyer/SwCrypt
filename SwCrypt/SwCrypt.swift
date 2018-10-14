@@ -1531,6 +1531,7 @@ open class CC {
 
 		public enum DHParam {
 			case rfc3526Group5
+			case rfc2409Group2
 		}
 
 		//this is stateful in CommonCrypto too, sry
@@ -1538,7 +1539,11 @@ open class CC {
 			fileprivate var ref: CCDHRef? = nil
 
 			public init(dhParam: DHParam) throws {
-				ref = CCDHCreate!(kCCDHRFC3526Group5!)
+				if dhParam == .rfc3526Group5 {
+					ref = CCDHCreate!(kCCDHRFC3526Group5!)
+				} else {
+					ref = CCDHCreate!(kCCDHRFC2409Group2!)
+				}
 				guard ref != nil else {
 					throw CCError(.paramError)
 				}
@@ -1586,7 +1591,9 @@ open class CC {
 			return CCDHCreate != nil &&
 				CCDHRelease != nil &&
 				CCDHGenerateKey != nil &&
-				CCDHComputeKey != nil
+				CCDHComputeKey != nil &&
+				CCDHParametersCreateFromData != nil &&
+				CCDHParametersRelease != nil
 		}
 
 		fileprivate typealias CCDHParameters = UnsafeRawPointer
@@ -1596,6 +1603,11 @@ open class CC {
 		fileprivate static let kCCDHRFC3526Group5M: kCCDHRFC3526Group5TM? =
 			getFunc(dl!, f: "kCCDHRFC3526Group5")
 		fileprivate static let kCCDHRFC3526Group5 = kCCDHRFC3526Group5M?.pointee
+
+		fileprivate typealias kCCDHRFC2409Group2TM = UnsafePointer<CCDHParameters>
+		fileprivate static let kCCDHRFC2409Group2M: kCCDHRFC2409Group2TM? =
+			getFunc(dl!, f: "kCCDHRFC2409Group2")
+		fileprivate static let kCCDHRFC2409Group2 = kCCDHRFC2409Group2M?.pointee
 
 		fileprivate typealias CCDHCreateT = @convention(c) (
 			_ dhParameter: CCDHParameters) -> CCDHRef
@@ -1615,6 +1627,16 @@ open class CC {
 			_ peerPubKey: UnsafeRawPointer, _ peerPubKeyLen: size_t,
 			_ ref: CCDHRef) -> CInt
 		fileprivate static let CCDHComputeKey: CCDHComputeKeyT? = getFunc(dl!, f: "CCDHComputeKey")
+
+		fileprivate typealias CCDHParametersCreateFromDataT = @convention(c) (
+			_ p: UnsafeRawPointer, _ pLen: Int,
+			_ g: UnsafeRawPointer, _ gLen: Int,
+			_ l: Int) -> CCDHParameters
+		fileprivate static let CCDHParametersCreateFromData: CCDHParametersCreateFromDataT? = getFunc(dl!, f: "CCDHParametersCreateFromData")
+
+		fileprivate typealias CCDHParametersReleaseT = @convention(c) (
+			_ parameters: CCDHParameters) -> Void
+		fileprivate static let CCDHParametersRelease: CCDHParametersReleaseT? = getFunc(dl!, f: "CCDHParametersRelease")
 	}
 
 	open class EC {
