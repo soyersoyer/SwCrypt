@@ -152,6 +152,13 @@ open class SwKeyConvert {
 			return pkcs1DERKey
 		}
 
+		public static func pemToPKCS8DER(_ pemKey: String) throws -> Data {
+			guard let derKey = try? PEM.PublicKey.toDER(pemKey) else {
+				throw SwError(.invalidKey)
+			}
+			return derKey
+		}
+
 		public static func derToPKCS1PEM(_ derKey: Data) -> String {
 			return PEM.PublicKey.toPEM(derKey)
 		}
