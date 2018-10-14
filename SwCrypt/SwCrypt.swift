@@ -589,6 +589,10 @@ open class CC {
 		case unimplemented = -4305
 		case overflow = -4306
 		case rngFailure = -4307
+		case unspecifiedError = -4308
+		case callSequenceError = -4309
+		case keySizeError = -4310
+		case invalidKey = -4311
 
 		public static var debugLevel = 1
 
