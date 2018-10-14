@@ -295,6 +295,27 @@ class SwCryptTest: XCTestCase {
 		XCTAssert(shared1! == shared2!)
 	}
 
+	func testECComponents() {
+		let keys = try? CC.EC.generateKeyPair(384)
+		XCTAssert(keys != nil)
+		let cPriv = try? CC.EC.getPrivateKeyComponents(keys!.0)
+		XCTAssert(cPriv != nil)
+		let cPub = try? CC.EC.getPublicKeyComponents(keys!.1)
+		XCTAssert(cPub != nil)
+		let keys2 = try? CC.EC.createFromData(cPub!.keySize, cPub!.x, cPub!.y)
+		XCTAssert(keys2 != nil)
+		XCTAssert(keys!.1 == keys2!)
+	}
+
+	func testECGetPublicFromPrivate() {
+		let keys = try? CC.EC.generateKeyPair(384)
+		XCTAssert(keys != nil)
+
+		let pub = try? CC.EC.getPublicKeyFromPrivateKey(keys!.0)
+		XCTAssert(pub != nil)
+		XCTAssert(pub == keys!.1)
+	}
+
 	func testDH() {
 		XCTAssert(CC.DH.available())
 		let dh1 = try? CC.DH.DH(dhParam: .rfc3526Group5)

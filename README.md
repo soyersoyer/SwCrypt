@@ -45,6 +45,13 @@ let signed = try? CC.EC.signHash(keys!.0, hash: hash)
 let verified = try? CC.EC.verifyHash(keys!.1, hash: hash, signedData: signed!)
 
 let shared = try? CC.EC.computeSharedSecret(keys!.0, publicKey: partnerPubKey)
+
+let privComponents = try? CC.EC.getPrivateKeyComponents(keys!.0)
+let pubComponents = try? CC.EC.getPublicKeyComponents(keys!.1)
+
+let pubKey = try? CC.EC.createFromData(keySize, x, y)
+let pubKey = try? CC.EC.getPublicKeyFromPrivateKey(keys!.0)
+
 ```
 ### Diffie-Hellman functions
 ```

@@ -1629,13 +1629,24 @@ open class CC {
 				CCECCryptorRelease!(pubKey!)
 			}
 
-			let privKeyDER = try exportKey(privKey!, format: .importKeyBinary, type: .keyPrivate)
-			let pubKeyDER = try exportKey(pubKey!, format: .importKeyBinary, type: .keyPublic)
+			let privKeyDER = try exportKey(privKey!, format: .binary, type: .keyPrivate)
+			let pubKeyDER = try exportKey(pubKey!, format: .binary, type: .keyPublic)
 			return (privKeyDER, pubKeyDER)
 		}
 
+		public static func getPublicKeyFromPrivateKey(_ privateKey: Data) throws -> Data {
+			let privKey = try importKey(privateKey, format: .binary, keyType: .keyPrivate)
+			defer { CCECCryptorRelease!(privKey) }
+
+			let pubKey = CCECCryptorGetPublicKeyFromPrivateKey!(privKey)
+			defer { CCECCryptorRelease!(pubKey) }
+
+			let pubKeyDER = try exportKey(pubKey, format: .binary, type: .keyPublic)
+			return pubKeyDER
+		}
+
 		public static func signHash(_ privateKey: Data, hash: Data) throws -> Data {
-			let privKey = try importKey(privateKey, format: .importKeyBinary, keyType: .keyPrivate)
+			let privKey = try importKey(privateKey, format: .binary, keyType: .keyPrivate)
 			defer { CCECCryptorRelease!(privKey) }
 
 			var signedDataLength = 4096
@@ -1656,7 +1667,7 @@ open class CC {
 		public static func verifyHash(_ publicKey: Data,
 									  hash: Data,
 									  signedData: Data) throws -> Bool {
-			let pubKey = try importKey(publicKey, format: .importKeyBinary, keyType: .keyPublic)
+			let pubKey = try importKey(publicKey, format: .binary, keyType: .keyPublic)
 			defer { CCECCryptorRelease!(pubKey) }
 
 			var valid: UInt32 = 0
@@ -1674,8 +1685,8 @@ open class CC {
 
 		public static func computeSharedSecret(_ privateKey: Data,
 											   publicKey: Data) throws -> Data {
-			let privKey = try importKey(privateKey, format: .importKeyBinary, keyType: .keyPrivate)
-			let pubKey = try importKey(publicKey, format: .importKeyBinary, keyType: .keyPublic)
+			let privKey = try importKey(privateKey, format: .binary, keyType: .keyPrivate)
+			let pubKey = try importKey(publicKey, format: .binary, keyType: .keyPublic)
 			defer {
 				CCECCryptorRelease!(privKey)
 				CCECCryptorRelease!(pubKey)
@@ -1690,6 +1701,66 @@ open class CC {
 
 			result.count = outSize
 			return result
+		}
+
+		public struct KeyComponents {
+			public init(_ keySize: Int, _ x: Data, _ y: Data, _ d: Data) {
+				self.keySize = keySize
+				self.x = x
+				self.y = y
+				self.d = d
+			}
+			public var keySize: Int
+			public var x: Data
+			public var y: Data
+			public var d: Data
+		}
+
+		public static func getPublicKeyComponents(_ keyData: Data) throws -> KeyComponents {
+			let key = try importKey(keyData, format: .binary, keyType: .keyPublic)
+			defer { CCECCryptorRelease!(key) }
+			return try getKeyComponents(key)
+		}
+
+		public static func getPrivateKeyComponents(_ keyData: Data) throws -> KeyComponents {
+			let key = try importKey(keyData, format: .binary, keyType: .keyPrivate)
+			defer { CCECCryptorRelease!(key) }
+			return try getKeyComponents(key)
+		}
+
+		fileprivate static func getKeyComponents(_ key: CCECCryptorRef) throws -> KeyComponents {
+			var keySize = 0, xSize = 8192, ySize = 8192, dSize = 8192
+			var x = Data(count: xSize), y = Data(count: ySize), d = Data(count: dSize)
+			let status = withUnsafePointers(&x, &y, &d, { xBytes, yBytes, dBytes in
+				return CCECCryptorGetKeyComponents!(key, &keySize,
+													xBytes, &xSize,
+													yBytes, &ySize,
+													dBytes, &dSize)
+			})
+			guard status == noErr else { throw CCError(status) }
+
+			x.count = xSize
+			y.count = ySize
+			d.count = dSize
+			if getKeyType(key) == .keyPublic {
+				d.count = 0
+			}
+
+			return KeyComponents(keySize, x, y, d)
+		}
+
+		public static func createFromData(_ keySize: size_t, _ x: Data, _ y: Data) throws -> Data {
+			var pubKey: CCECCryptorRef? = nil
+
+			let status = withUnsafePointers(x, y, { xBytes, yBytes in
+				return CCECCryptorCreateFromData!(keySize, xBytes, x.count,
+												  yBytes, y.count, &pubKey)
+			})
+			guard status == noErr else { throw CCError(status) }
+			defer { CCECCryptorRelease!(pubKey!) }
+
+			let pubKeyBin = try exportKey(pubKey!, format: .binary, type: .keyPublic)
+			return pubKeyBin
 		}
 
 		fileprivate static func importKey(_ key: Data, format: KeyExternalFormat,
@@ -1723,6 +1794,10 @@ open class CC {
 			return expKey
 		}
 
+		fileprivate static func getKeyType(_ key: CCECCryptorRef) -> KeyType {
+			return KeyType(rawValue: CCECGetKeyType!(key))!
+		}
+
 		public static func available() -> Bool {
 			return CCECCryptorGeneratePair != nil &&
 				CCECCryptorImportKey != nil &&
@@ -1730,7 +1805,11 @@ open class CC {
 				CCECCryptorRelease != nil &&
 				CCECCryptorSignHash != nil &&
 				CCECCryptorVerifyHash != nil &&
-				CCECCryptorComputeSharedSecret != nil
+				CCECCryptorComputeSharedSecret != nil &&
+				CCECCryptorGetKeyComponents != nil &&
+				CCECCryptorCreateFromData != nil &&
+				CCECGetKeyType != nil &&
+				CCECCryptorGetPublicKeyFromPrivateKey != nil
 		}
 
 		fileprivate enum KeyType: CCECKeyType {
@@ -1742,7 +1821,7 @@ open class CC {
 
 		fileprivate typealias CCECKeyExternalFormat = UInt32
 		fileprivate enum KeyExternalFormat: CCECKeyExternalFormat {
-			case importKeyBinary = 0, importKeyDER
+			case binary = 0, der
 		}
 
 		fileprivate typealias CCECCryptorRef = UnsafeRawPointer
@@ -1797,6 +1876,38 @@ open class CC {
 			_ outLen: UnsafeMutablePointer<size_t>) -> CCCryptorStatus
 		fileprivate static let CCECCryptorComputeSharedSecret: CCECCryptorComputeSharedSecretT? =
 			getFunc(dl!, f: "CCECCryptorComputeSharedSecret")
+
+		fileprivate typealias CCECCryptorGetKeyComponentsT = @convention(c)(
+			_ ecKey: CCECCryptorRef,
+			_ keySize: UnsafeMutablePointer<Int>,
+			_ qX: UnsafeMutableRawPointer,
+			_ qXLength: UnsafeMutablePointer<Int>,
+			_ qY: UnsafeMutableRawPointer,
+			_ qYLength: UnsafeMutablePointer<Int>,
+			_ d: UnsafeMutableRawPointer?,
+			_ dLength: UnsafeMutablePointer<Int>) -> CCCryptorStatus
+		fileprivate static let CCECCryptorGetKeyComponents: CCECCryptorGetKeyComponentsT? =
+			getFunc(dl!, f: "CCECCryptorGetKeyComponents")
+
+		fileprivate typealias CCECCryptorCreateFromDataT = @convention(c)(
+			_ keySize: size_t,
+			_ qX: UnsafeRawPointer,
+			_ qXLength: size_t,
+			_ qY: UnsafeRawPointer,
+			_ qYLength: size_t,
+			_ publicKey: UnsafeMutablePointer<CCECCryptorRef?>) -> CCCryptorStatus
+		fileprivate static let CCECCryptorCreateFromData: CCECCryptorCreateFromDataT? =
+			getFunc(dl!, f: "CCECCryptorCreateFromData")
+
+		fileprivate typealias CCECGetKeyTypeT = @convention(c) (
+			_ key: CCECCryptorRef) -> CCECKeyType
+		fileprivate static let CCECGetKeyType: CCECGetKeyTypeT? =
+			getFunc(dl!, f: "CCECGetKeyType")
+
+		fileprivate typealias CCECCryptorGetPublicKeyFromPrivateKeyT = @convention(c) (
+			_ key: CCECCryptorRef) -> CCECCryptorRef
+		fileprivate static let CCECCryptorGetPublicKeyFromPrivateKey: CCECCryptorGetPublicKeyFromPrivateKeyT? =
+			getFunc(dl!, f: "CCECCryptorGetPublicKeyFromPrivateKey")
 	}
 
 	open class CRC {
@@ -2189,6 +2300,24 @@ fileprivate func withUnsafePointers<A0, A1, A2, Result>(
 	) rethrows -> Result {
 	return try arg0.withUnsafeBytes { p0 in
 		return try arg1.withUnsafeBytes { p1 in
+			return try arg2.withUnsafeMutableBytes { p2 in
+				return try body(p0, p1, p2)
+			}
+		}
+	}
+}
+
+fileprivate func withUnsafePointers<A0, A1, A2, Result>(
+	_ arg0: inout Data,
+	_ arg1: inout Data,
+	_ arg2: inout Data,
+	_ body: (
+		UnsafeMutablePointer<A0>,
+		UnsafeMutablePointer<A1>,
+		UnsafeMutablePointer<A2>) throws -> Result
+	) rethrows -> Result {
+	return try arg0.withUnsafeMutableBytes { p0 in
+		return try arg1.withUnsafeMutableBytes { p1 in
 			return try arg2.withUnsafeMutableBytes { p2 in
 				return try body(p0, p1, p2)
 			}
