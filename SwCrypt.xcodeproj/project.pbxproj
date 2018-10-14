@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		2C6840A91F8C3A6E00BF8DD7 /* SwCrypt.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0A71E921CBC7DB4002C5C88 /* SwCrypt.swift */; };
 		2C6840AA1F8C3B1D00BF8DD7 /* SwCrypt.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A0A71E781CBC7D74002C5C88 /* SwCrypt.framework */; };
+		A0086F222172C48D0052F457 /* SwCrypt.podspec in Resources */ = {isa = PBXBuildFile; fileRef = A0086F212172C48D0052F457 /* SwCrypt.podspec */; };
 		A051E37E1DBA5DA4004293E9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A051E37D1DBA5DA4004293E9 /* AppDelegate.swift */; };
 		A051E3801DBA5DA4004293E9 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A051E37F1DBA5DA4004293E9 /* ViewController.swift */; };
 		A051E3831DBA5DA4004293E9 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = A051E3811DBA5DA4004293E9 /* Main.storyboard */; };
@@ -36,6 +37,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		A0086F212172C48D0052F457 /* SwCrypt.podspec */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = SwCrypt.podspec; sourceTree = "<group>"; };
 		A042DCB91CC0800F00271902 /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		A051E37B1DBA5DA3004293E9 /* dummyTestApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = dummyTestApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A051E37D1DBA5DA4004293E9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -104,6 +106,7 @@
 		A0A71E6E1CBC7D74002C5C88 = {
 			isa = PBXGroup;
 			children = (
+				A0086F212172C48D0052F457 /* SwCrypt.podspec */,
 				A042DCB91CC0800F00271902 /* README.md */,
 				A0A71E7A1CBC7D74002C5C88 /* SwCrypt */,
 				A0A71E861CBC7D74002C5C88 /* SwCryptTests */,
@@ -277,6 +280,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A0086F222172C48D0052F457 /* SwCrypt.podspec in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
