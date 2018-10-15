@@ -23,8 +23,15 @@ class SwCryptTest: XCTestCase {
 		XCTAssert(CC.randomAvailable())
 		XCTAssert(CC.hmacAvailable())
 		XCTAssert(CC.cryptorAvailable())
+		XCTAssert(CC.KeyDerivation.available())
+		XCTAssert(CC.KeyWrap.available())
 		XCTAssert(CC.RSA.available())
+		XCTAssert(CC.DH.available())
+		XCTAssert(CC.EC.available())
+		XCTAssert(CC.CRC.available())
+		XCTAssert(CC.CMAC.available())
 		XCTAssert(CC.GCM.available())
+		XCTAssert(CC.CCM.available())
 		XCTAssert(CC.available())
 	}
 
@@ -156,6 +163,18 @@ class SwCryptTest: XCTestCase {
             XCTAssert(pubKey == genPubKey)
     }
 
+	func testEncryptDecryptPKCS1() {
+		let (priv, pub) = keyPair!
+
+		let testData = "This is a test string".data(using: String.Encoding.utf8)!
+
+		let e = try? CC.RSA.encrypt(testData, derKey: pub, tag: Data(), padding: .pkcs1, digest: .none)
+		XCTAssert(e != nil)
+		let d = try? CC.RSA.decrypt(e!, derKey: priv, tag: Data(), padding: .pkcs1, digest: .none)
+		XCTAssert(d != nil)
+		XCTAssert(testData == d!.0)
+	}
+
 	func testEncryptDecryptOAEPSHA256() {
 		let (priv, pub) = keyPair!
 		let testData = "This is a test string".data(using: String.Encoding.utf8)!
@@ -271,6 +290,8 @@ class SwCryptTest: XCTestCase {
 	}
 
 	func testECSignVerify() {
+		XCTAssert(CC.EC.available())
+
 		let keys = try? CC.EC.generateKeyPair(256)
 		XCTAssert(keys != nil)
 		let hash = "c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a"
@@ -283,6 +304,8 @@ class SwCryptTest: XCTestCase {
 	}
 
 	func testECSharedSecret() {
+		XCTAssert(CC.EC.available())
+
 		let keys1 = try? CC.EC.generateKeyPair(384)
 		XCTAssert(keys1 != nil)
 		let keys2 = try? CC.EC.generateKeyPair(384)
@@ -296,6 +319,8 @@ class SwCryptTest: XCTestCase {
 	}
 
 	func testECComponents() {
+		XCTAssert(CC.EC.available())
+
 		let keys = try? CC.EC.generateKeyPair(384)
 		XCTAssert(keys != nil)
 		let cPriv = try? CC.EC.getPrivateKeyComponents(keys!.0)
@@ -308,6 +333,8 @@ class SwCryptTest: XCTestCase {
 	}
 
 	func testECGetPublicFromPrivate() {
+		XCTAssert(CC.EC.available())
+
 		let keys = try? CC.EC.generateKeyPair(384)
 		XCTAssert(keys != nil)
 
