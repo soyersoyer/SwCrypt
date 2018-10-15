@@ -1099,10 +1099,8 @@ open class CC {
 				return CCRSACryptorEncrypt!(
 					key,
 					padding.rawValue,
-					dataBytes,
-					data.count,
-					bufferBytes,
-					&bufferSize,
+					dataBytes, data.count,
+					bufferBytes, &bufferSize,
 					tagBytes, tag.count,
 					digest.rawValue)
 			})
@@ -1129,10 +1127,8 @@ open class CC {
 				return CCRSACryptorDecrypt!(
 					key,
 					padding.rawValue,
-					dataBytes,
-					bufferSize,
-					bufferBytes,
-					&bufferSize,
+					dataBytes, data.count,
+					bufferBytes, &bufferSize,
 					tagBytes, tag.count,
 					digest.rawValue)
 			})
