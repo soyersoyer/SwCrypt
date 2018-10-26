@@ -6,7 +6,7 @@ Pod::Spec.new do |spec|
   spec.license = { type: 'MIT' }
   spec.authors = { "soyersoyer" => 'soyer@irl.hu' }
   spec.swift_version = "4.2"
-  spec.ios.deployment_target = "10.0"
+  spec.ios.deployment_target = "8.0"
   spec.osx.deployment_target = "10.12"
   spec.watchos.deployment_target = "3.0"
   spec.tvos.deployment_target = "11.0"
