@@ -133,6 +133,11 @@ Install
 -------
 Just copy [SwCrypt.swift](https://github.com/soyersoyer/SwCrypt/blob/master/SwCrypt/SwCrypt.swift) to your project or use the [Carthage](https://github.com/Carthage/Carthage) dependency manager.
 
+### With Cocoapods:
+```
+pod 'SwCrypt'
+```
+
 Inspired from
 -------------
 
