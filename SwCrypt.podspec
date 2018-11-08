@@ -3,7 +3,7 @@ Pod::Spec.new do |spec|
   spec.version = "5.1.0"
   spec.summary = "RSA public/private key generation, RSA, AES encryption/decryption, RSA sign/verify in Swift with CommonCrypto in iOS and OS X"
   spec.homepage = "https://github.com/soyersoyer/SwCrypt"
-  spec.license = { type: 'MIT' }
+  spec.license      = { :type => 'MIT' }
   spec.authors = { "soyersoyer" => 'soyer@irl.hu' }
   spec.swift_version = "4.2"
   spec.ios.deployment_target = "8.0"
