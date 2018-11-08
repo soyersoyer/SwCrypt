@@ -12,5 +12,5 @@ Pod::Spec.new do |spec|
   spec.tvos.deployment_target = "11.0"
   spec.requires_arc = true
   spec.source = { git: "https://github.com/omargawish/SwCrypt.git", :tag => spec.version }
-  spec.source_files = "SwCrypt/**/*"
+  spec.source_files = "SwCrypt/**/*.{h,swift}"
 end
