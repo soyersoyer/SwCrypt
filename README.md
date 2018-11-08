@@ -149,8 +149,6 @@ Just copy [SwCrypt.swift](https://github.com/soyersoyer/SwCrypt/blob/master/SwCr
 [CocoaPods]: https://cocoapods.org
 [CocoaPods Installation]: https://guides.cocoapods.org/using/getting-started.html#getting-started
  
- 4. In your code import SwCrypt like so:
-   `import SwCrypt`
 
 Inspired from
 -------------
