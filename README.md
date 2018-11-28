@@ -133,6 +133,23 @@ Install
 -------
 Just copy [SwCrypt.swift](https://github.com/soyersoyer/SwCrypt/blob/master/SwCrypt/SwCrypt.swift) to your project or use the [Carthage](https://github.com/Carthage/Carthage) dependency manager.
 
+### CocoaPods
+[CocoaPods][] is a dependency manager for Cocoa projects. To install SwCrypt with CocoaPods:
+
+ 1. Make sure CocoaPods is [installed][CocoaPods Installation].
+
+ 2. Update your Podfile to include the following:
+
+    ``` ruby
+    pod 'SwCrypt'
+    ```
+
+ 3. Run `pod install`.
+
+[CocoaPods]: https://cocoapods.org
+[CocoaPods Installation]: https://guides.cocoapods.org/using/getting-started.html#getting-started
+ 
+
 Inspired from
 -------------
 
