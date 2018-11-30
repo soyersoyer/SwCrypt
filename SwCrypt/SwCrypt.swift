@@ -445,6 +445,7 @@ open class PEM {
 		}
 	}
 
+	// OpenSSL PKCS#1 compatible encrypted private key
 	open class EncryptedPrivateKey {
 
 		public enum EncMode {
