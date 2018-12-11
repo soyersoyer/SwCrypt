@@ -8,8 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		2C6840A91F8C3A6E00BF8DD7 /* SwCrypt.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0A71E921CBC7DB4002C5C88 /* SwCrypt.swift */; };
-		2C6840AA1F8C3B1D00BF8DD7 /* SwCrypt.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A0A71E781CBC7D74002C5C88 /* SwCrypt.framework */; };
 		A0086F222172C48D0052F457 /* SwCrypt.podspec in Resources */ = {isa = PBXBuildFile; fileRef = A0086F212172C48D0052F457 /* SwCrypt.podspec */; };
+		A01057F821C03ADD008392E0 /* SwCrypt.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = A0A71E781CBC7D74002C5C88 /* SwCrypt.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		A051E37E1DBA5DA4004293E9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A051E37D1DBA5DA4004293E9 /* AppDelegate.swift */; };
 		A051E3801DBA5DA4004293E9 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A051E37F1DBA5DA4004293E9 /* ViewController.swift */; };
 		A051E3831DBA5DA4004293E9 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = A051E3811DBA5DA4004293E9 /* Main.storyboard */; };
@@ -20,7 +20,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		A051E38D1DBA5DAA004293E9 /* PBXContainerItemProxy */ = {
+		A01057F521C03AC8008392E0 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = A0A71E6F1CBC7D74002C5C88 /* Project object */;
 			proxyType = 1;
@@ -34,7 +34,28 @@
 			remoteGlobalIDString = A0A71E771CBC7D74002C5C88;
 			remoteInfo = SwCrypt;
 		};
+		A0C5816C21C02C60003BF9B8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A0A71E6F1CBC7D74002C5C88 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A0A71E771CBC7D74002C5C88;
+			remoteInfo = SwCrypt;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A01057F921C03ADD008392E0 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				A01057F821C03ADD008392E0 /* SwCrypt.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		A0086F212172C48D0052F457 /* SwCrypt.podspec */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = SwCrypt.podspec; sourceTree = "<group>"; };
@@ -99,7 +120,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2C6840AA1F8C3B1D00BF8DD7 /* SwCrypt.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -268,10 +288,12 @@
 				A051E3771DBA5DA3004293E9 /* Sources */,
 				A051E3781DBA5DA3004293E9 /* Frameworks */,
 				A051E3791DBA5DA3004293E9 /* Resources */,
+				A01057F921C03ADD008392E0 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				A0C5816D21C02C60003BF9B8 /* PBXTargetDependency */,
 			);
 			name = dummyTestApp;
 			productName = dummyTestApp;
@@ -308,7 +330,7 @@
 			);
 			dependencies = (
 				A0A71E851CBC7D74002C5C88 /* PBXTargetDependency */,
-				A051E38E1DBA5DAA004293E9 /* PBXTargetDependency */,
+				A01057F621C03AC8008392E0 /* PBXTargetDependency */,
 			);
 			name = SwCryptTests;
 			productName = SwCryptTests;
@@ -339,8 +361,9 @@
 					};
 					A051E37A1DBA5DA3004293E9 = {
 						CreatedOnToolsVersion = 8.0;
+						DevelopmentTeam = X5L4X5ZF45;
 						LastSwiftMigration = 0900;
-						ProvisioningStyle = Manual;
+						ProvisioningStyle = Automatic;
 						SystemCapabilities = {
 							com.apple.Keychain = {
 								enabled = 1;
@@ -350,11 +373,13 @@
 					A0A71E771CBC7D74002C5C88 = {
 						CreatedOnToolsVersion = 7.3;
 						LastSwiftMigration = 0900;
+						ProvisioningStyle = Manual;
 					};
 					A0A71E811CBC7D74002C5C88 = {
 						CreatedOnToolsVersion = 7.3;
+						DevelopmentTeam = X5L4X5ZF45;
 						LastSwiftMigration = 0900;
-						ProvisioningStyle = Automatic;
+						ProvisioningStyle = Manual;
 						TestTargetID = A051E37A1DBA5DA3004293E9;
 					};
 				};
@@ -481,15 +506,20 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		A051E38E1DBA5DAA004293E9 /* PBXTargetDependency */ = {
+		A01057F621C03AC8008392E0 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = A051E37A1DBA5DA3004293E9 /* dummyTestApp */;
-			targetProxy = A051E38D1DBA5DAA004293E9 /* PBXContainerItemProxy */;
+			targetProxy = A01057F521C03AC8008392E0 /* PBXContainerItemProxy */;
 		};
 		A0A71E851CBC7D74002C5C88 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = A0A71E771CBC7D74002C5C88 /* SwCrypt */;
 			targetProxy = A0A71E841CBC7D74002C5C88 /* PBXContainerItemProxy */;
+		};
+		A0C5816D21C02C60003BF9B8 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A0A71E771CBC7D74002C5C88 /* SwCrypt */;
+			targetProxy = A0C5816C21C02C60003BF9B8 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -712,14 +742,15 @@
 		A051E38A1DBA5DA4004293E9 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
 				CLANG_WARN_INFINITE_RECURSION = YES;
 				CLANG_WARN_SUSPICIOUS_MOVES = YES;
 				CODE_SIGN_ENTITLEMENTS = dummyTestApp/dummyTestApp.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
-				CODE_SIGN_STYLE = Manual;
-				DEVELOPMENT_TEAM = "";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = X5L4X5ZF45;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)",
@@ -727,7 +758,7 @@
 				INFOPLIST_FILE = dummyTestApp/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 8.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				PRODUCT_BUNDLE_IDENTIFIER = hu.irl.dummyTestApp;
+				PRODUCT_BUNDLE_IDENTIFIER = hu.irl.dummyTestAppa;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
@@ -739,14 +770,15 @@
 		A051E38B1DBA5DA4004293E9 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
 				CLANG_WARN_INFINITE_RECURSION = YES;
 				CLANG_WARN_SUSPICIOUS_MOVES = YES;
 				CODE_SIGN_ENTITLEMENTS = dummyTestApp/dummyTestApp.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
-				CODE_SIGN_STYLE = Manual;
-				DEVELOPMENT_TEAM = "";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = X5L4X5ZF45;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(PROJECT_DIR)",
@@ -754,7 +786,7 @@
 				INFOPLIST_FILE = dummyTestApp/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 8.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				PRODUCT_BUNDLE_IDENTIFIER = hu.irl.dummyTestApp;
+				PRODUCT_BUNDLE_IDENTIFIER = hu.irl.dummyTestAppa;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OPTIMIZATION_LEVEL = "-Owholemodule";
@@ -879,7 +911,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+				CODE_SIGN_STYLE = Manual;
 				DEFINES_MODULE = YES;
 				DEVELOPMENT_TEAM = "";
 				DYLIB_COMPATIBILITY_VERSION = 1;
@@ -890,6 +924,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = hu.irl.SwCrypt;
 				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_SWIFT3_OBJC_INFERENCE = Off;
@@ -901,7 +936,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_MODULES = YES;
-				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "";
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
+				CODE_SIGN_STYLE = Manual;
 				DEFINES_MODULE = YES;
 				DEVELOPMENT_TEAM = "";
 				DYLIB_COMPATIBILITY_VERSION = 1;
@@ -912,6 +949,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = hu.irl.SwCrypt;
 				PRODUCT_NAME = "$(TARGET_NAME:c99extidentifier)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = YES;
 				SWIFT_SWIFT3_OBJC_INFERENCE = Off;
 				SWIFT_VERSION = 4.2;
@@ -922,9 +960,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
-				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "";
+				CODE_SIGN_STYLE = Manual;
+				DEVELOPMENT_TEAM = X5L4X5ZF45;
 				INFOPLIST_FILE = SwCryptTests/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
 				PRODUCT_BUNDLE_IDENTIFIER = hu.irl.SwCryptTests;
@@ -940,8 +979,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Developer";
-				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_STYLE = Manual;
 				DEVELOPMENT_TEAM = "";
 				INFOPLIST_FILE = SwCryptTests/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
