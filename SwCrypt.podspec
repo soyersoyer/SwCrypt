@@ -1,6 +1,6 @@
 Pod::Spec.new do |spec|
   spec.name = "SwCrypt"
-  spec.version = "5.1.2"
+  spec.version = "5.1.3"
   spec.summary = "RSA public/private key generation, RSA, AES encryption/decryption, RSA sign/verify in Swift with CommonCrypto in iOS and OS X"
   spec.homepage = "https://github.com/soyersoyer/SwCrypt"
   spec.license = { :type => 'MIT' }
