@@ -148,6 +148,17 @@ Just copy [SwCrypt.swift](https://github.com/soyersoyer/SwCrypt/blob/master/SwCr
 
 [CocoaPods]: https://cocoapods.org
 [CocoaPods Installation]: https://guides.cocoapods.org/using/getting-started.html#getting-started
+
+### Swift Package Manager
+SPM is built into new versions of Xcode. To install SwCrypt with SPM:
+
+1. Open your project in Xcode
+
+2. Click "File" -> "Swift Packages" -> "Add Package Dependency..."
+
+3. Paste the following URL: https://github.com/soyersoyer/SwCrypt
+
+4. Click "Next" -> "Next" -> "Finish"
  
 
 Inspired from
