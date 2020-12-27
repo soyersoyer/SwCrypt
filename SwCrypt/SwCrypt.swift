@@ -436,11 +436,11 @@ open class PEM {
 		fileprivate static let pemPrefix = "-----BEGIN PUBLIC KEY-----\n"
 		fileprivate static let pemSuffix = "\n-----END PUBLIC KEY-----"
 
-		fileprivate static func addHeader(_ base64: String) -> String {
+		public static func addHeader(_ base64: String) -> String {
 			return pemPrefix + base64 + pemSuffix
 		}
 
-		fileprivate static func stripHeader(_ pemKey: String) -> String? {
+		public static func stripHeader(_ pemKey: String) -> String? {
 			return PEM.stripHeaderFooter(pemKey, header: pemPrefix, footer: pemSuffix)
 		}
 	}
