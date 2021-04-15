@@ -2078,7 +2078,7 @@ open class CC {
 	open class KeyWrap {
 
 		fileprivate static let rfc3394IVData: [UInt8] = [0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6]
-		public static let rfc3394IV = Data(bytes: UnsafePointer<UInt8>(rfc3394IVData), count:rfc3394IVData.count)
+		public static let rfc3394IV = Data(rfc3394IVData)
 
 		public static func SymmetricKeyWrap(_ iv: Data,
 											kek: Data,
