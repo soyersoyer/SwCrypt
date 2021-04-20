@@ -624,7 +624,7 @@ open class CC {
 	public static func generateRandom(_ size: Int) -> Data {
 		var data = Data(count: size)
 		data.withUnsafeMutableBytes { dataBytes in
-			_ = CCRandomGenerateBytes!(dataBytes, size)
+			_ = CCRandomGenerateBytes!(dataBytes.baseAddress!.assumingMemoryBound(to: CCRandomGenerateBytesT.self), size)
 		}
 		return data
 	}
@@ -761,7 +761,7 @@ open class CC {
 		status = result.withUnsafeMutableBytes { resultBytes in
 			return CCCryptorFinal!(
 				cryptor!,
-				resultBytes + updateLen,
+                resultBytes.baseAddress!.assumingMemoryBound(to: UInt8.self) + updateLen,
 				rescount - updateLen,
 				&finalLen)
 		}
@@ -955,7 +955,7 @@ open class CC {
 				return CCCryptorCreateWithMode!(
 					opMode.rawValue, AuthBlockMode.ccm.rawValue,
 					algorithm.rawValue, Padding.noPadding.rawValue,
-					nil, keyBytes, key.count, nil, 0,
+                    nil, keyBytes.baseAddress!.assumingMemoryBound(to: UInt8.self), key.count, nil, 0,
 					0, CCModeOptions(), &cryptor)
 			}
 			guard status == noErr else { throw CCError(status) }
@@ -969,12 +969,12 @@ open class CC {
 			guard status == noErr else { throw CCError(status) }
 
 			status = iv.withUnsafeBytes { ivBytes in
-				return CCCryptorAddParameter!(cryptor!, Parameter.iv.rawValue, ivBytes, iv.count)
+				return CCCryptorAddParameter!(cryptor!, Parameter.iv.rawValue, ivBytes.baseAddress!.assumingMemoryBound(to: UInt8.self), iv.count)
 			}
 			guard status == noErr else { throw CCError(status) }
 
 			status = aData.withUnsafeBytes { aDataBytes in
-				return CCCryptorAddParameter!(cryptor!, Parameter.authData.rawValue, aDataBytes, aData.count)
+				return CCCryptorAddParameter!(cryptor!, Parameter.authData.rawValue, aDataBytes.baseAddress!.assumingMemoryBound(to: UInt8.self), aData.count)
 			}
 			guard status == noErr else { throw CCError(status) }
 
@@ -991,7 +991,7 @@ open class CC {
 
 			var finalLen: size_t = 0
 			status = result.withUnsafeMutableBytes { resultBytes in
-				return CCCryptorFinal!(cryptor!, resultBytes + updateLen,
+				return CCCryptorFinal!(cryptor!, resultBytes.baseAddress!.assumingMemoryBound(to: UInt8.self) + updateLen,
 									   rescount - updateLen,
 									   &finalLen)
 			}
@@ -1003,7 +1003,7 @@ open class CC {
 			var tag = Data(count: tagLength)
 			status = tag.withUnsafeMutableBytes { tagBytes in
 				return CCCryptorGetParameter!(cryptor!, Parameter.authTag.rawValue,
-											  tagBytes, &tagLength_)
+											  tagBytes.baseAddress!.assumingMemoryBound(to: UInt8.self), &tagLength_)
 			}
 			guard status == noErr else { throw CCError(status) }
 
@@ -1143,7 +1143,7 @@ open class CC {
 			var key: CCRSACryptorRef? = nil
 			let status = derKey.withUnsafeBytes { derKeyBytes in
 				return CCRSACryptorImport!(
-					derKeyBytes,
+					derKeyBytes.baseAddress!.assumingMemoryBound(to: UInt8.self),
 					derKey.count,
 					&key)
 			}
@@ -1156,7 +1156,7 @@ open class CC {
 			var derKeyLength = 8192
 			var derKey = Data(count: derKeyLength)
 			let status = derKey.withUnsafeMutableBytes { derKeyBytes in
-				return CCRSACryptorExport!(key, derKeyBytes, &derKeyLength)
+				return CCRSACryptorExport!(key, derKeyBytes.baseAddress!.assumingMemoryBound(to: UInt8.self), &derKeyLength)
 			}
 			guard status == noErr else { throw CCError(status) }
 
@@ -1346,7 +1346,7 @@ open class CC {
 
 			let zeroBits = 8 * emLength - emBits
 			maskedDB.withUnsafeMutableBytes { maskedDBBytes in
-				maskedDBBytes[0] &= 0xff >> UInt8(zeroBits)
+				maskedDBBytes.baseAddress!.assumingMemoryBound(to: UInt8.self)[0] &= 0xff >> UInt8(zeroBits)
 			}
 
 			var ret = maskedDB
@@ -1392,7 +1392,7 @@ open class CC {
 			let dbMask = mgf1(digest, seed: mPrimeHash, maskLength: emLength - hash.count - 1)
 			var db = xorData(maskedDB, dbMask)
 			db.withUnsafeMutableBytes { dbBytes in
-				dbBytes[0] &= 0xff >> UInt8(zeroBits)
+				dbBytes.baseAddress!.assumingMemoryBound(to: UInt8.self)[0] &= 0xff >> UInt8(zeroBits)
 			}
 
 			let zeroLength = emLength - hash.count - saltLength - 2
@@ -1559,7 +1559,7 @@ open class CC {
 				var outputLength = 8192
 				var output = Data(count: outputLength)
 				let status = output.withUnsafeMutableBytes { outputBytes in
-					return CCDHGenerateKey!(ref!, outputBytes, &outputLength)
+					return CCDHGenerateKey!(ref!, outputBytes.baseAddress!.assumingMemoryBound(to: UInt8.self), &outputLength)
 				}
 				output.count = outputLength
 				guard status != -1 else {
@@ -1727,7 +1727,7 @@ open class CC {
 			var outSize = 8192
 			var result = Data(count:outSize)
 			let status = result.withUnsafeMutableBytes { resultBytes in
-				return CCECCryptorComputeSharedSecret!(privKey, pubKey, resultBytes, &outSize)
+				return CCECCryptorComputeSharedSecret!(privKey, pubKey, resultBytes.baseAddress!.assumingMemoryBound(to: UInt8.self), &outSize)
 			}
 			guard status == noErr else { throw CCError(status) }
 
@@ -1800,7 +1800,7 @@ open class CC {
 			var impKey: CCECCryptorRef? = nil
 			let status = key.withUnsafeBytes { keyBytes in
 				return CCECCryptorImportKey!(format.rawValue,
-											keyBytes, key.count,
+											keyBytes.baseAddress!.assumingMemoryBound(to: UInt8.self), key.count,
 											keyType.rawValue, &impKey)
 			}
 			guard status == noErr else { throw CCError(status) }
@@ -1815,7 +1815,7 @@ open class CC {
 			let status = expKey.withUnsafeMutableBytes { expKeyBytes in
 				return CCECCryptorExportKey!(
 					format.rawValue,
-					expKeyBytes,
+					expKeyBytes.baseAddress!.assumingMemoryBound(to: UInt8.self),
 					&expKeyLength,
 					type.rawValue,
 					key)
@@ -1978,7 +1978,7 @@ open class CC {
 			let status = input.withUnsafeBytes { inputBytes in
 				return CNCRC!(
 						mode.rawValue,
-						inputBytes, input.count,
+						inputBytes.baseAddress!.assumingMemoryBound(to: UInt8.self), input.count,
 						&result)
 			}
 			guard status == noErr else {
@@ -2184,8 +2184,8 @@ extension Data {
 
 	public func hexadecimalString() -> String {
 		var hexstr = String()
-		self.withUnsafeBytes {(data: UnsafePointer<UInt8>) in
-			for i in UnsafeBufferPointer<UInt8>(start: data, count: count) {
+        self.withUnsafeBytes { data in
+            for i in UnsafeBufferPointer<UInt8>(start: data.baseAddress!.assumingMemoryBound(to: UInt8.self), count: count) {
 				hexstr += String(format: "%02X", i)
 			}
 		}
@@ -2224,7 +2224,7 @@ extension Data {
 		subscript (position: Int) -> UInt8 {
 			var value: UInt8 = 0
 			data.withUnsafeBytes { dataBytes in
-				value = UnsafeBufferPointer<UInt8>(start: dataBytes, count: data.count)[position]
+				value = UnsafeBufferPointer<UInt8>(start: dataBytes.baseAddress!.assumingMemoryBound(to: UInt8.self), count: data.count)[position]
 			}
 			return value
 		}
@@ -2302,7 +2302,10 @@ fileprivate func withUnsafePointers<A0, A1, Result>(
 	) rethrows -> Result {
 	return try arg0.withUnsafeBytes { p0 in
 		return try arg1.withUnsafeBytes { p1 in
-			return try body(p0, p1)
+			return try body(
+                p0.baseAddress!.assumingMemoryBound(to: A0.self),
+                p1.baseAddress!.assumingMemoryBound(to: A1.self)
+            )
 		}
 	}
 }
@@ -2316,7 +2319,10 @@ fileprivate func withUnsafePointers<A0, A1, Result>(
 	) rethrows -> Result {
 	return try arg0.withUnsafeBytes { p0 in
 		return try arg1.withUnsafeMutableBytes { p1 in
-			return try body(p0, p1)
+			return try body(
+                p0.baseAddress!.assumingMemoryBound(to: A0.self),
+                p1.baseAddress!.assumingMemoryBound(to: A1.self)
+            )
 		}
 	}
 }
@@ -2333,7 +2339,11 @@ fileprivate func withUnsafePointers<A0, A1, A2, Result>(
 	return try arg0.withUnsafeBytes { p0 in
 		return try arg1.withUnsafeBytes { p1 in
 			return try arg2.withUnsafeMutableBytes { p2 in
-				return try body(p0, p1, p2)
+				return try body(
+                    p0.baseAddress!.assumingMemoryBound(to: A0.self),
+                    p1.baseAddress!.assumingMemoryBound(to: A1.self),
+                    p2.baseAddress!.assumingMemoryBound(to: A2.self)
+                )
 			}
 		}
 	}
@@ -2351,7 +2361,11 @@ fileprivate func withUnsafePointers<A0, A1, A2, Result>(
 	return try arg0.withUnsafeMutableBytes { p0 in
 		return try arg1.withUnsafeMutableBytes { p1 in
 			return try arg2.withUnsafeMutableBytes { p2 in
-				return try body(p0, p1, p2)
+				return try body(
+                    p0.baseAddress!.assumingMemoryBound(to: A0.self),
+                    p1.baseAddress!.assumingMemoryBound(to: A1.self),
+                    p2.baseAddress!.assumingMemoryBound(to: A2.self)
+                )
 			}
 		}
 	}
@@ -2372,7 +2386,12 @@ fileprivate func withUnsafePointers<A0, A1, A2, A3, Result>(
 		return try arg1.withUnsafeBytes { p1 in
 			return try arg2.withUnsafeBytes { p2 in
 				return try arg3.withUnsafeMutableBytes { p3 in
-					return try body(p0, p1, p2, p3)
+					return try body(
+                        p0.baseAddress!.assumingMemoryBound(to: A0.self),
+                        p1.baseAddress!.assumingMemoryBound(to: A1.self),
+                        p2.baseAddress!.assumingMemoryBound(to: A2.self),
+                        p3.baseAddress!.assumingMemoryBound(to: A3.self)
+                    )
 				}
 			}
 		}
@@ -2400,7 +2419,14 @@ fileprivate func withUnsafePointers<A0, A1, A2, A3, A4, A5, Result>(
 				return try arg3.withUnsafeBytes { p3 in
 					return try arg4.withUnsafeMutableBytes { p4 in
 						return try arg5.withUnsafeMutableBytes { p5 in
-							return try body(p0, p1, p2, p3, p4, p5)
+							return try body(
+                                p0.baseAddress!.assumingMemoryBound(to: A0.self),
+                                p1.baseAddress!.assumingMemoryBound(to: A1.self),
+                                p2.baseAddress!.assumingMemoryBound(to: A2.self),
+                                p3.baseAddress!.assumingMemoryBound(to: A3.self),
+                                p4.baseAddress!.assumingMemoryBound(to: A4.self),
+                                p5.baseAddress!.assumingMemoryBound(to: A5.self)
+                            )
 						}
 					}
 				}
