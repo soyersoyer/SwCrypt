@@ -1,4 +1,5 @@
 import Foundation
+import CommonCrypto
 
 open class SwKeyStore {
 
@@ -725,7 +726,7 @@ open class CC {
 
 	public static func crypt(_ opMode: OpMode, blockMode: BlockMode,
 							algorithm: Algorithm, padding: Padding,
-							data: Data, key: Data, iv: Data) throws -> Data {
+							data: Data, key: Data, iv: Data, options: Int = kCCModeOptionCTR_BE) throws -> Data {
 		if blockMode.needIV {
 			guard iv.count == algorithm.blockSize else { throw CCError(.paramError) }
 		}
@@ -737,7 +738,7 @@ open class CC {
 				algorithm.rawValue, padding.rawValue,
 				ivBytes, keyBytes, key.count,
 				nil, 0, 0,
-				CCModeOptions(), &cryptor)
+				CCModeOptions(options), &cryptor)
 		})
 
 		guard status == noErr else { throw CCError(status) }
