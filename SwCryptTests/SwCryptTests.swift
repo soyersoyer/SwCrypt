@@ -135,6 +135,17 @@ class SwCryptTest: XCTestCase {
 			XCTAssert($0 as? SwKeyConvert.SwError == SwKeyConvert.SwError.badPassphrase)
 		}
 	}
+    
+    func testPKCS8KeyPair() {
+        let (priv, pub) = keyPair!
+        
+        let privKeyPem = SwKeyConvert.PrivateKey.derToPKCS8PEM(priv)
+        
+        let privKey = try? SwKeyConvert.PrivateKey.pemToPKCS1DER(privKeyPem)
+        let genPubKey = try? CC.RSA.getPublicKeyFromPrivateKey(privKey!)
+        
+        XCTAssert(pub == genPubKey)
+    }
 
 	func testOpenSSLKeyPair() {
 		let bundle = Bundle(for: type(of: self))

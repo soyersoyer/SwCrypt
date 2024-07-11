@@ -10,6 +10,7 @@ let (privateKey, publicKey) = try! CC.RSA.generateKeyPair(2048)
 ### Convert them to PEM format
 ```
 let privateKeyPEM = try SwKeyConvert.PrivateKey.derToPKCS1PEM(privateKey)
+let privateKeyPEMPKCS8 = try SwKeyConvert.PrivateKey.derToPKCS8PEM(privateKey)
 let publicKeyPEM = SwKeyConvert.PublicKey.derToPKCS8PEM(publicKey)
 ```
 ### Or read them from strings with PEM data

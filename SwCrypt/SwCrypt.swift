@@ -115,6 +115,11 @@ open class SwKeyConvert {
 		public static func derToPKCS1PEM(_ derKey: Data) -> String {
 			return PEM.PrivateKey.toPEM(derKey)
 		}
+        
+        public static func derToPKCS8PEM(_ derKey: Data) -> String {
+            let pkcs8Key = PKCS8.PrivateKey.addHeader(derKey)
+            return PEM.PrivateKey.toPEM(pkcs8Key)
+        }
 
 		public typealias EncMode = PEM.EncryptedPrivateKey.EncMode
 
@@ -177,6 +182,19 @@ open class SwKeyConvert {
 open class PKCS8 {
 
 	open class PrivateKey {
+        private static let RSAVersion: [UInt8] = [0x02, 0x01, 0x00] // version 0
+        private static let RSAOID: [UInt8] = [0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
+                     0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00]
+        
+        public static func addHeader(_ derKey: Data) -> Data {
+            let octetString: [UInt8] = [0x04] + encodeLength(derKey.count) + derKey.bytesView
+               
+            // assemble the PKCS#8 header
+            let sequence: [UInt8] = [0x30] + encodeLength(RSAVersion.count + RSAOID.count + octetString.count) + RSAVersion + RSAOID + octetString
+            
+            return Data(sequence)
+        }
+
 
 		// https://lapo.it/asn1js/
 		public static func getPKCS1DEROffset(_ derKey: Data) -> Int? {
@@ -205,15 +223,12 @@ open class PKCS8 {
 				return 0
 			}
 
-			let OID: [UInt8] = [0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
-								0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00]
+			guard bytes.length > offset + RSAOID.count else { return nil }
+			let slice = derKey.bytesViewRange(NSRange(location: offset, length: RSAOID.count))
 
-			guard bytes.length > offset + OID.count else { return nil }
-			let slice = derKey.bytesViewRange(NSRange(location: offset, length: OID.count))
+			guard RSAOID.elementsEqual(slice) else { return nil }
 
-			guard OID.elementsEqual(slice) else { return nil }
-
-			offset += OID.count
+			offset += RSAOID.count
 
 			guard bytes.length > offset else { return nil }
 			guard bytes[offset] == 0x04 else { return nil }
@@ -242,7 +257,16 @@ open class PKCS8 {
 		public static func hasCorrectHeader(_ derKey: Data) -> Bool {
 			return getPKCS1DEROffset(derKey) != nil
 		}
-
+        
+        // Helper function to encode length in DER
+        private static func encodeLength(_ length: Int) -> [UInt8] {
+            if length < 128 {
+                return [UInt8(length)]
+            } else {
+                let lengthBytes = withUnsafeBytes(of: length.bigEndian, Array.init).drop { $0 == 0 }
+                return [0x80 | UInt8(lengthBytes.count)] + lengthBytes
+            }
+        }
 	}
 
 	open class PublicKey {
